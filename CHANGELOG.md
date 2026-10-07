@@ -22,4 +22,5 @@
 - Duplicate a job from the new More menu
 - Restore the previous version of a plist or the crontab; restoring again switches back
 - Convert a cron job to a LaunchAgent; the cron line is disabled, not deleted
+- View the raw plist or crontab, with a Copy button
 - Install with `make` into /Applications so Spotlight finds the app

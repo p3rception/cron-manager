@@ -183,6 +183,7 @@ struct AgentDetail: View {
     let duplicate: () -> Void
     @State private var confirmDelete = false
     @State private var confirmRestore = false
+    @State private var viewing = false
 
     var body: some View {
         let loaded = state.isLoaded(agent)
@@ -214,6 +215,7 @@ struct AgentDetail: View {
                     Button("Edit", action: edit).disabled(agent.broken)
                     Menu("More") {
                         Button("Duplicate...", action: duplicate).disabled(agent.broken)
+                        Button("View Plist") { viewing = true }
                         Button("Show Plist in Finder") { NSWorkspace.shared.activateFileViewerSelecting([agent.url]) }
                         Divider()
                         Button("Restore Previous Version...") { confirmRestore = true }.disabled(backup == nil)
@@ -228,6 +230,12 @@ struct AgentDetail: View {
         .formStyle(.grouped)
         .confirmationDialog("Move \(agent.label) to the Trash?", isPresented: $confirmDelete) {
             Button("Move to Trash", role: .destructive) { state.perform { try Launchd.delete(agent, loaded: loaded) } }
+        }
+        .sheet(isPresented: $viewing) {
+            // plutil turns binary plists into readable XML.
+            let xml = run("/usr/bin/plutil", ["-convert", "xml1", "-o", "-", agent.url.path])
+            TextSheet(title: agent.url.lastPathComponent,
+                      text: xml.status == 0 ? xml.out : (try? String(contentsOf: agent.url, encoding: .utf8)) ?? xml.err)
         }
         .confirmationDialog("Restore the version from \(backup.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "")?",
                             isPresented: $confirmRestore) {
@@ -316,6 +324,7 @@ struct CronDetail: View {
     @State private var confirmDelete = false
     @State private var confirmRestore = false
     @State private var running = false
+    @State private var viewing = false
 
     var body: some View {
         Form {
@@ -343,6 +352,7 @@ struct CronDetail: View {
                         Button("Convert to LaunchAgent...", action: convert)
                             .disabled(Agent(converting: job) == nil)
                             .help("launchd can't express custom cron schedules")
+                        Button("View Crontab") { viewing = true }
                         Divider()
                         Button("Restore Previous Crontab...") { confirmRestore = true }
                             .disabled(backupDate("crontab") == nil)
@@ -356,6 +366,7 @@ struct CronDetail: View {
         }
         .formStyle(.grouped)
         .sheet(isPresented: $running) { RunSheet(command: job.command) }
+        .sheet(isPresented: $viewing) { TextSheet(title: "crontab -l", text: run(Crontab.tool, ["-l"]).out) }
         .confirmationDialog("Restore the crontab from \(backupDate("crontab").map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "")?",
                             isPresented: $confirmRestore) {
             Button("Restore") {
@@ -436,6 +447,37 @@ struct OwnerHeader: View {
         let name = owner.isApp ? "Added by \(owner.name)" : owner.name
         guard let url = owner.url else { return name }
         return "\(name), \((url.path as NSString).abbreviatingWithTildeInPath)"
+    }
+}
+
+/// Read-only text with Copy, for the raw plist or crontab.
+struct TextSheet: View {
+    let title: String
+    let text: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.headline)
+            ScrollView {
+                Text(text)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(8)
+            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 6))
+            HStack {
+                Spacer()
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                }
+                Button("Close") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(width: 640, height: 480)
     }
 }
 
