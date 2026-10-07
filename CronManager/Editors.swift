@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Creates or edits a LaunchAgent. Keys the form does not show are kept.
-/// With `template`, it creates a new job prefilled from that one.
+/// With `template`, it creates a new job prefilled from that one, for
+/// Duplicate and for converting a cron job.
 struct AgentEditor: View {
     let original: Agent?
     var template: Agent? = nil
@@ -83,7 +84,7 @@ struct AgentEditor: View {
         nameFocused = original == nil
         guard let source else { return }
         let p = source.plist
-        label = source.label + (original == nil ? "-copy" : "")
+        label = source.label
         command = commandLine(source.arguments)
         schedule = Schedule(plist: p)
         if schedule.kind == .custom { schedule.custom = source.rawSchedule }
@@ -91,8 +92,6 @@ struct AgentEditor: View {
         stdout = p["StandardOutPath"] as? String ?? ""
         stderr = p["StandardErrorPath"] as? String ?? ""
         logOn = !stdout.isEmpty || !stderr.isEmpty
-        // A copy writes its own log, named after its label.
-        if original == nil { stdout = ""; stderr = "" }
         workingDirectory = p["WorkingDirectory"] as? String ?? ""
         environment = (p["EnvironmentVariables"] as? [String: String] ?? [:])
             .sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "\n")

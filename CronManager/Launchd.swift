@@ -49,6 +49,13 @@ struct Agent: Identifiable {
         return "on demand"
     }
 
+    /// A job that exists only in memory, used to prefill the editor.
+    init(url: URL, plist: [String: Any]) {
+        self.url = url
+        self.plist = plist
+        broken = false
+    }
+
     init(url: URL) {
         self.url = url
         let parsed = (try? Data(contentsOf: url)).flatMap {
@@ -118,6 +125,37 @@ private func signalMeaning(_ signal: Int) -> String {
     case 11: "crashed (segmentation fault)"
     case 15: "stopped"
     default: "killed by signal \(signal)"
+    }
+}
+
+extension Agent {
+    /// A new job with the same settings, "-copy" on the label and its own log.
+    var copy: Agent {
+        var p = plist
+        let label = self.label + "-copy"
+        p["Label"] = label
+        for key in ["StandardOutPath", "StandardErrorPath"] where p[key] != nil {
+            p[key] = FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/\(label).log"
+        }
+        return Agent(url: Launchd.dir.appending(path: "\(label).plist"), plist: p)
+    }
+
+    /// A LaunchAgent that does what a cron job does. nil for custom cron
+    /// schedules, which launchd keys cannot express.
+    init?(converting job: CronJob) {
+        let schedule = Schedule(cron: job.schedule)
+        guard schedule.kind != .custom else { return nil }
+        let first = job.baseCommand.split(separator: " ").first.map { (String($0) as NSString).lastPathComponent } ?? ""
+        let name = slugify((first as NSString).deletingPathExtension)
+        let label = "com.\(NSUserName()).\(name.isEmpty ? "cron-job" : name)"
+        // cron runs commands with /bin/sh, so a shell command keeps that shell.
+        var p: [String: Any] = ["Label": label, "ProgramArguments": argumentList(job.baseCommand, original: ["/bin/sh", "-c", ""])]
+        schedule.apply(to: &p)
+        if let log = job.logPath {
+            p["StandardOutPath"] = log
+            p["StandardErrorPath"] = log
+        }
+        self.init(url: Launchd.dir.appending(path: "\(label).plist"), plist: p)
     }
 }
 

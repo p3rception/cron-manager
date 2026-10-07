@@ -21,4 +21,5 @@
 - Run Now for cron jobs shows the output live, with the exit status and a Stop button
 - Duplicate a job from the new More menu
 - Restore the previous version of a plist or the crontab; restoring again switches back
+- Convert a cron job to a LaunchAgent; the cron line is disabled, not deleted
 - Install with `make` into /Applications so Spotlight finds the app

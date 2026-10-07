@@ -20,6 +20,7 @@ enum Editing: Identifiable {
     case cron(CronJob?)
     case copyAgent(Agent)
     case copyCron(CronJob)
+    case convert(CronJob, Agent)
 
     var id: String {
         switch self {
@@ -27,6 +28,7 @@ enum Editing: Identifiable {
         case .cron(let j): "cron:\(j.map { String($0.id) } ?? "new")"
         case .copyAgent(let a): "copy:\(a.id)"
         case .copyCron(let j): "copy-cron:\(j.id)"
+        case .convert(let j, _): "convert:\(j.id)"
         }
     }
 }
@@ -81,11 +83,12 @@ struct ContentView: View {
             switch selection {
             case .agent(let id):
                 if let agent = state.agents.first(where: { $0.id == id }) {
-                    AgentDetail(state: state, agent: agent, edit: { editing = .agent(agent) }, duplicate: { editing = .copyAgent(agent) })
+                    AgentDetail(state: state, agent: agent, edit: { editing = .agent(agent) }, duplicate: { editing = .copyAgent(agent.copy) })
                 }
             case .cron(let id):
                 if let job = state.cronJobs.first(where: { $0.id == id }) {
                     CronDetail(state: state, job: job, edit: { editing = .cron(job) }, duplicate: { editing = .copyCron(job) },
+                               convert: { if let agent = Agent(converting: job) { editing = .convert(job, agent) } },
                                deleted: { selection = nil })
                 }
             case nil:
@@ -98,6 +101,12 @@ struct ContentView: View {
                 agentEditor(original: original, template: nil)
             case .copyAgent(let template):
                 agentEditor(original: nil, template: template)
+            case .convert(let job, let template):
+                agentEditor(original: nil, template: template) {
+                    var off = job
+                    off.enabled = false
+                    try state.writeCron { $0[job.id] = off.line }
+                }
             case .cron(let original):
                 cronEditor(original: original, template: nil)
             case .copyCron(let template):
@@ -110,14 +119,18 @@ struct ContentView: View {
         }
     }
 
-    private func agentEditor(original: Agent?, template: Agent?) -> some View {
+    /// `created` runs after a new job is saved and loaded.
+    private func agentEditor(original: Agent?, template: Agent?, created: @escaping () throws -> Void = {}) -> some View {
         AgentEditor(original: original, template: template) { plist in
             try Launchd.save(plist, replacing: original, loaded: original.map(state.isLoaded) ?? false)
             state.refresh()
             // A new job is loaded right away, otherwise it would not run until the next login.
             if original == nil, let agent = state.agents.first(where: { $0.label == plist["Label"] as? String }) {
                 selection = .agent(agent.id)
-                state.perform { try Launchd.load(agent) }
+                state.perform {
+                    try Launchd.load(agent)
+                    try created()
+                }
             }
         }
     }
@@ -298,6 +311,7 @@ struct CronDetail: View {
     let job: CronJob
     let edit: () -> Void
     let duplicate: () -> Void
+    let convert: () -> Void
     let deleted: () -> Void
     @State private var confirmDelete = false
     @State private var confirmRestore = false
@@ -326,6 +340,9 @@ struct CronDetail: View {
                     Button("Edit", action: edit)
                     Menu("More") {
                         Button("Duplicate...", action: duplicate)
+                        Button("Convert to LaunchAgent...", action: convert)
+                            .disabled(Agent(converting: job) == nil)
+                            .help("launchd can't express custom cron schedules")
                         Divider()
                         Button("Restore Previous Crontab...") { confirmRestore = true }
                             .disabled(backupDate("crontab") == nil)
