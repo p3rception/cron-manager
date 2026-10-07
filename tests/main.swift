@@ -3,6 +3,10 @@
 // a plain executable.
 import Foundation
 
+// Next run
+let cal = Calendar.current
+let wed = cal.date(from: DateComponents(year: 2026, month: 10, day: 7, hour: 10, minute: 7))!  // a Wednesday
+func at(_ d: Date?) -> DateComponents { cal.dateComponents([.year, .month, .day, .hour, .minute], from: d!) }
 let job = CronJob(id: 0, line: "0 0,12 * * *   /bin/echo  'a  b'")!
 assert(job.schedule == "0 0,12 * * *")
 assert(job.command == "/bin/echo  'a  b'")
@@ -27,7 +31,28 @@ for expr in ["*/15 * * * *", "* * * * *", "5 * * * *", "0 */2 * * *", "30 9 * * 
 }
 assert(Schedule(cron: "0 9 * * 1-5").weekdays == [1, 2, 3, 4, 5])
 assert(Schedule(cron: "0 9 * * 7").weekdays == [0])
-assert(Schedule(cron: "0 0,12 * * *").kind == .custom)
+let twice = Schedule(cron: "0 0,12 * * *")
+assert(twice.kind == .daily && twice.times.map(\.text) == ["00:00", "12:00"] && twice.cronExpression == "0 0,12 * * *")
+assert(twice.summary(login: "") == "every day at 00:00 and 12:00")
+assert(at(twice.nextRun(after: wed, clockAligned: true)) == DateComponents(year: 2026, month: 10, day: 7, hour: 12, minute: 0))
+assert(Schedule(cron: "0 9-11 * * 1-5").times.count == 3)
+assert(Schedule(cron: "0,20,40 * * * *").kind == .interval && Schedule(cron: "0,20,40 * * * *").every == 20)
+assert(Schedule(cron: "0,30 9 * * *").kind == .custom)
+var mixed = twice
+mixed.times = [.init(hour: 9, minute: 0), .init(hour: 17, minute: 30)]
+assert(mixed.cronProblem != nil && twice.cronProblem == nil)
+var twicePlist: [String: Any] = [:]
+mixed.apply(to: &twicePlist)
+assert((twicePlist["StartCalendarInterval"] as? [[String: Int]])?.count == 2)
+assert(Schedule(plist: twicePlist).times == mixed.times)
+var weeklyTwice = Schedule(cron: "0 9,17 * * 1,3")
+var wtPlist: [String: Any] = [:]
+weeklyTwice.apply(to: &wtPlist)
+assert((wtPlist["StartCalendarInterval"] as? [[String: Int]])?.count == 4)
+let wtBack = Schedule(plist: wtPlist)
+assert(wtBack.kind == .weekly && wtBack.weekdays == [1, 3] && wtBack.times.count == 2)
+weeklyTwice.times = [.init(hour: 17, minute: 0), .init(hour: 9, minute: 0), .init(hour: 9, minute: 0)]
+assert(weeklyTwice.cronExpression == "0 9,17 * * 1,3")
 assert(Schedule(cron: "*/7 * * * *").kind == .custom)
 assert(Schedule(cron: "75 * * * *").kind == .custom)
 assert(Schedule(cron: "@daily").cronExpression == "0 0 * * *")
@@ -38,7 +63,7 @@ var plist: [String: Any] = ["Label": "x", "KeepAlive": true]
 weekly.apply(to: &plist)
 assert(plist["KeepAlive"] as? Bool == true)
 let back = Schedule(plist: plist.filter { $0.key != "KeepAlive" })
-assert(back.kind == .weekly && back.weekdays == [1, 3] && back.hour == 9)
+assert(back.kind == .weekly && back.weekdays == [1, 3] && back.times == [.init(hour: 9, minute: 0)])
 assert(Schedule(plist: ["StartInterval": 3600]).kind == .interval)
 assert(Schedule(plist: ["StartInterval": 3600]).unit == .hours)
 assert(Schedule(plist: ["StartInterval": 45]).kind == .custom)
@@ -65,10 +90,6 @@ assert(argumentList("echo 2", original: ["/bin/bash", "-c", "echo 1"]) == ["/bin
 assert(slugify("Καθημερινό backup!") == "kathemerino-backup", slugify("Καθημερινό backup!"))
 assert(slugify("  Daily  Backup ") == "daily-backup")
 
-// Next run
-let cal = Calendar.current
-let wed = cal.date(from: DateComponents(year: 2026, month: 10, day: 7, hour: 10, minute: 7))!  // a Wednesday
-func at(_ d: Date?) -> DateComponents { cal.dateComponents([.year, .month, .day, .hour, .minute], from: d!) }
 assert(at(Schedule(cron: "*/15 * * * *").nextRun(after: wed, clockAligned: true)) == DateComponents(year: 2026, month: 10, day: 7, hour: 10, minute: 15))
 assert(at(Schedule(cron: "0 */6 * * *").nextRun(after: wed, clockAligned: true)) == DateComponents(year: 2026, month: 10, day: 7, hour: 12, minute: 0))
 assert(at(Schedule(cron: "30 9 * * *").nextRun(after: wed, clockAligned: true)) == DateComponents(year: 2026, month: 10, day: 8, hour: 9, minute: 30))

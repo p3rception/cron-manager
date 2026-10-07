@@ -140,6 +140,7 @@ struct CronEditor: View {
         guard !job.command.isEmpty, !job.command.contains("\n") else { throw AppError("Enter a one-line command.") }
         guard job.hasValidShape else { throw AppError("A cron schedule needs five fields or one @keyword.") }
         if schedule.kind == .weekly, schedule.weekdays.isEmpty { throw AppError("Pick at least one day.") }
+        if let problem = schedule.cronProblem { throw AppError(problem) }
         try save(job)
         dismiss()
     }
@@ -277,15 +278,39 @@ struct ScheduleFields: View {
             : "Current schedule: \(schedule.custom). Kept as is."
     }
 
+    /// One picker per run time, with remove buttons and Add Time.
     private var timePicker: some View {
-        DatePicker("At", selection: Binding(
-            get: { Calendar.current.date(bySettingHour: schedule.hour, minute: schedule.minute, second: 0, of: .now) ?? .now },
-            set: {
-                let c = Calendar.current.dateComponents([.hour, .minute], from: $0)
-                schedule.hour = c.hour ?? 0
-                schedule.minute = c.minute ?? 0
+        LabeledContent("At") {
+            VStack(alignment: .trailing) {
+                ForEach(schedule.times.indices, id: \.self) { i in
+                    HStack {
+                        DatePicker("Time \(i + 1)", selection: Binding(
+                            get: { Calendar.current.date(bySettingHour: schedule.times[i].hour, minute: schedule.times[i].minute, second: 0, of: .now) ?? .now },
+                            set: {
+                                let c = Calendar.current.dateComponents([.hour, .minute], from: $0)
+                                schedule.times[i] = .init(hour: c.hour ?? 0, minute: c.minute ?? 0)
+                            }
+                        ), displayedComponents: .hourAndMinute)
+                        .labelsHidden()
+                        Button {
+                            schedule.times.remove(at: i)
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(schedule.times.count == 1)
+                        .help("Remove this time")
+                        .accessibilityLabel("Remove time \(i + 1)")
+                    }
+                }
+                Button("Add Time") {
+                    // Same minutes, so the new time also works for cron.
+                    let last = schedule.times.last ?? .init(hour: 9, minute: 0)
+                    schedule.times.append(.init(hour: (last.hour + 1) % 24, minute: last.minute))
+                }
+                .controlSize(.small)
             }
-        ), displayedComponents: .hourAndMinute)
+        }
     }
 
     private func title(_ kind: Schedule.Kind) -> String {
