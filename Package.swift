@@ -9,6 +9,7 @@ let package = Package(
         .executableTarget(
             name: "CronManager",
             path: "CronManager",
+            exclude: ["AppIcon.icns"],
             swiftSettings: [
                 .swiftLanguageMode(.v5),
                 .defaultIsolation(MainActor.self),

@@ -10,8 +10,9 @@ pkill -x CronManager 2>/dev/null || true
 swift build -c release --disable-keychain
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$(swift build -c release --show-bin-path)/CronManager" "$APP/Contents/MacOS/CronManager"
+cp CronManager/AppIcon.icns "$APP/Contents/Resources/"
 
 PLIST="$APP/Contents/Info.plist"
 plutil -create xml1 "$PLIST"
@@ -19,6 +20,7 @@ set_key() { plutil -replace "$1" "-$2" "$3" "$PLIST"; }
 set_key CFBundleExecutable string CronManager
 set_key CFBundleIdentifier string com.per.CronManager
 set_key CFBundleName string "Cron Manager"
+set_key CFBundleIconFile string AppIcon
 set_key CFBundlePackageType string APPL
 VERSION=$(git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || echo v0.0.0)
 set_key CFBundleShortVersionString string "${VERSION#v}"
