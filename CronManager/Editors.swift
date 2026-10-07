@@ -14,6 +14,9 @@ struct AgentEditor: View {
     @State private var label = ""
     @State private var stdout = ""
     @State private var stderr = ""
+    @State private var workingDirectory = ""
+    @State private var environment = ""
+    @State private var showAdvanced = false
     @FocusState private var nameFocused: Bool
 
     private var slug: String {
@@ -44,9 +47,9 @@ struct AgentEditor: View {
                     logOn = on
                     if on, original != nil, stdout.isEmpty, stderr.isEmpty { stdout = defaultLog; stderr = defaultLog }
                 })) {
-                    Text("Save output to \((logPath(stdout) as NSString).abbreviatingWithTildeInPath)")
+                    Text("Save output to \(((logPath(stdout).isEmpty ? defaultLog : logPath(stdout)) as NSString).abbreviatingWithTildeInPath)")
                 }
-                DisclosureGroup("Advanced") {
+                DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
                     TextField("Label", text: $label, prompt: Text(effectiveLabel))
                     if schedule.kind != .atLogin {
                         Toggle("Also run at login", isOn: $runAtLoad)
@@ -55,6 +58,19 @@ struct AgentEditor: View {
                         TextField("Output log", text: $stdout, prompt: Text(defaultLog))
                         TextField("Error log", text: $stderr, prompt: Text(defaultLog))
                     }
+                    TextField("Working folder", text: $workingDirectory, prompt: Text("/"))
+                    LabeledContent("Environment") {
+                        VStack(alignment: .trailing) {
+                            TextEditor(text: $environment)
+                                .font(.system(.body, design: .monospaced))
+                                .frame(height: 60)
+                            if FileManager.default.fileExists(atPath: "/opt/homebrew/bin") {
+                                Button("Add Homebrew to PATH", action: addHomebrewPath).controlSize(.small)
+                            }
+                        }
+                    }
+                    Text("One NAME=value per line. launchd starts jobs with PATH=/usr/bin:/bin:/usr/sbin:/sbin, so tools from Homebrew are not found unless PATH is set here.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
@@ -72,6 +88,28 @@ struct AgentEditor: View {
         stdout = p["StandardOutPath"] as? String ?? ""
         stderr = p["StandardErrorPath"] as? String ?? ""
         logOn = !stdout.isEmpty || !stderr.isEmpty
+        workingDirectory = p["WorkingDirectory"] as? String ?? ""
+        environment = (p["EnvironmentVariables"] as? [String: String] ?? [:])
+            .sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "\n")
+        showAdvanced = !workingDirectory.isEmpty || !environment.isEmpty
+    }
+
+    /// Puts Homebrew in front of launchd's default PATH, replacing any PATH line.
+    private func addHomebrewPath() {
+        let path = "PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
+        let others = environment.split(separator: "\n").filter { !$0.hasPrefix("PATH=") }.map(String.init)
+        environment = ([path] + others).joined(separator: "\n")
+    }
+
+    private func parseEnvironment() throws -> [String: String] {
+        var result: [String: String] = [:]
+        for line in environment.split(separator: "\n").map({ $0.trimmingCharacters(in: .whitespaces) }) where !line.isEmpty {
+            guard let eq = line.firstIndex(of: "="), line[..<eq].wholeMatch(of: #/[A-Za-z_][A-Za-z0-9_]*/#) != nil else {
+                throw AppError("\"\(line)\" is not NAME=value.")
+            }
+            result[String(line[..<eq])] = String(line[line.index(after: eq)...])
+        }
+        return result
     }
 
     private func submit() throws {
@@ -103,6 +141,19 @@ struct AgentEditor: View {
         for (key, field) in [("StandardOutPath", stdout), ("StandardErrorPath", stderr)] {
             if logOn, !logPath(field).isEmpty { p[key] = logPath(field) } else { p[key] = nil }
         }
+        let folder = workingDirectory.trimmingCharacters(in: .whitespaces)
+        if folder.isEmpty {
+            p["WorkingDirectory"] = nil
+        } else {
+            // launchd fails with exit 78 when it cannot change to this folder.
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: folder, isDirectory: &isDir), isDir.boolValue else {
+                throw AppError("The working folder \(folder) does not exist.")
+            }
+            p["WorkingDirectory"] = folder
+        }
+        let env = try parseEnvironment()
+        if env.isEmpty { p["EnvironmentVariables"] = nil } else { p["EnvironmentVariables"] = env }
         return p
     }
 }

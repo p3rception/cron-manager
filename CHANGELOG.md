@@ -16,4 +16,5 @@
 - Explain exit codes in plain words, such as 78 configuration error
 - Show next run, last output and runs since loaded
 - Search jobs by label, owner or command
+- Set a LaunchAgent's working folder and environment variables, with a button that adds Homebrew to PATH
 - Install with `make` into /Applications so Spotlight finds the app
