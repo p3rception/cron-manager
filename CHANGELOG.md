@@ -11,4 +11,7 @@
 - Show the app that owns each job, with Open and Show in Finder buttons, and flag jobs whose app is gone
 - New LaunchAgents are loaded and selected after saving
 - Logs update live, so Run Now output shows up
+- Flag jobs that need attention (missing program, script or log folder, empty plist, failed last run) and filter the list to them
+- Explain exit codes in plain words, such as 78 configuration error
+- Show next run, last output and runs since loaded
 - Install with `make` into /Applications so Spotlight finds the app

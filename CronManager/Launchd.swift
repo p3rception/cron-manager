@@ -59,6 +59,68 @@ struct Agent: Identifiable {
     }
 }
 
+extension Agent {
+    /// Problems visible from the plist and the file system.
+    var fileProblems: [Problem] {
+        if broken {
+            return [Problem(title: "Plist cannot be read", hint: "\(url.lastPathComponent) is not a valid property list. Delete it, or fix it in a text editor.")]
+        }
+        if plist.isEmpty {
+            return [Problem(title: "Plist is empty", hint: "It has no settings, so launchd cannot run it. Delete it unless an app writes it again.")]
+        }
+        var problems: [Problem] = []
+        if plist["Label"] == nil {
+            problems.append(Problem(title: "Label missing", hint: "launchd needs a Label key to load the job."))
+        }
+        problems += programProblems(arguments)
+        for dir in Set(logPaths.map { ($0 as NSString).deletingLastPathComponent }).sorted()
+        where !FileManager.default.fileExists(atPath: dir) {
+            problems.append(Problem(title: "Log folder missing", hint: "launchd cannot start a job whose log folder does not exist. Create \(dir), or change the log path."))
+        }
+        if let dir = plist["WorkingDirectory"] as? String, !FileManager.default.fileExists(atPath: dir) {
+            problems.append(Problem(title: "Working folder missing", hint: "\(dir) does not exist, so launchd cannot start the job."))
+        }
+        return problems
+    }
+}
+
+/// What a `launchctl list` status means: an exit code, or minus a signal number.
+func exitMeaning(_ code: Int) -> String {
+    if code < 0 { return signalMeaning(-code) }
+    switch code {
+    case 0: return "success"
+    case 1: return "general error"
+    case 2: return "bad arguments"
+    case 64: return "usage error"
+    case 65: return "bad input data"
+    case 66: return "input file missing"
+    case 69: return "service unavailable"
+    case 70: return "internal error"
+    case 71: return "system error"
+    case 73: return "cannot create output file"
+    case 74: return "input/output error"
+    case 75: return "temporary failure"
+    case 77: return "permission denied"
+    case 78: return "configuration error"
+    case 126: return "not executable"
+    case 127: return "command not found"
+    case 129..<160: return signalMeaning(code - 128)
+    default: return "error"
+    }
+}
+
+private func signalMeaning(_ signal: Int) -> String {
+    switch signal {
+    case 2: "interrupted"
+    case 6: "crashed (abort)"
+    case 9: "killed"
+    case 10: "crashed (bus error)"
+    case 11: "crashed (segmentation fault)"
+    case 15: "stopped"
+    default: "killed by signal \(signal)"
+    }
+}
+
 /// A job as `launchctl list` reports it. Absent from the list means not loaded.
 struct AgentStatus {
     var pid: Int?
@@ -98,6 +160,13 @@ enum Launchd {
     static func unload(_ agent: Agent) throws {
         try check(tool, ["bootout", "\(domain)/\(agent.label)"])
         try check(tool, ["disable", "\(domain)/\(agent.label)"])
+    }
+
+    /// How often launchd started the job since it was loaded. launchd keeps
+    /// no last-run time, only this count.
+    static func runs(_ agent: Agent) -> Int? {
+        let out = run(tool, ["print", "\(domain)/\(agent.label)"]).out
+        return out.firstMatch(of: #/(?m)^\truns = (\d+)$/#).flatMap { Int($0.1) }
     }
 
     static func kickstart(_ agent: Agent) throws {

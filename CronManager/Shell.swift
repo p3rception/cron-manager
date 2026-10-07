@@ -107,3 +107,45 @@ func slugify(_ name: String) -> String {
     let latin = name.applyingTransform(.toLatin, reverse: false)?.applyingTransform(.stripDiacritics, reverse: false) ?? name
     return latin.lowercased().replacing(#/[^a-z0-9]+/#, with: "-").trimmingCharacters(in: CharacterSet(charactersIn: "-"))
 }
+
+/// Something that stops a job from running, with a hint on how to fix it.
+struct Problem: Hashable {
+    let title: String
+    let hint: String
+}
+
+private let interpreters: Set<String> = ["sh", "bash", "zsh", "dash", "ksh", "fish", "python", "python3", "perl", "ruby", "node", "osascript", "php"]
+
+/// Checks that the program, and the script an interpreter runs, exist and
+/// can run. Only absolute paths are checked; PATH lookups are left alone.
+func programProblems(_ argv: [String]) -> [Problem] {
+    guard let program = argv.first else {
+        return [Problem(title: "No program set", hint: "Edit the job and enter a command.")]
+    }
+    var problems = pathProblems(program, script: false)
+    guard interpreters.contains((program as NSString).lastPathComponent), argv.count > 1 else { return problems }
+    if isShellCommand(argv) {
+        // ponytail: only the first word of a quote-free command is checked.
+        if !argv[2].contains(where: { "\"'".contains($0) }), let first = argv[2].split(separator: " ").first {
+            problems += pathProblems(String(first), script: false)
+        }
+    } else {
+        problems += pathProblems(argv[1], script: true)
+    }
+    return problems
+}
+
+private func pathProblems(_ path: String, script: Bool) -> [Problem] {
+    guard path.hasPrefix("/") else { return [] }
+    if !FileManager.default.fileExists(atPath: path) {
+        var hint = "\(path) does not exist. Reinstall what added this job, or delete the job."
+        if let formula = path.firstMatch(of: #/^/(?:opt/homebrew|usr/local)/opt/([^/]+)//#)?.1 {
+            hint = "\(path) does not exist. Reinstall it with brew install \(formula), or remove the job with brew services cleanup."
+        }
+        return [Problem(title: script ? "Script not found" : "Program not found", hint: hint)]
+    }
+    if !script, !FileManager.default.isExecutableFile(atPath: path) {
+        return [Problem(title: "Program is not executable", hint: "Run chmod +x \(shellQuote(path)) in Terminal.")]
+    }
+    return []
+}

@@ -31,27 +31,39 @@ struct ContentView: View {
     let state: AppState
     @State private var selection: Selection?
     @State private var editing: Editing?
+    @State private var onlyProblems = false
 
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
                 Section("LaunchAgents") {
-                    ForEach(state.agents) { agent in
+                    ForEach(state.agents.filter { !onlyProblems || !state.problems($0).isEmpty }) { agent in
                         let owner = state.owner(agent)
-                        row(agent.label, detail: "\(owner.name), \(state.statusText(agent)), \(agent.schedule)", owner: owner)
+                        row(agent.label, detail: "\(owner.name), \(state.statusText(agent)), \(agent.schedule)",
+                            owner: owner, problem: state.problems(agent).first)
                             .tag(Selection.agent(agent.id))
                     }
                 }
                 Section("Crontab") {
-                    ForEach(state.cronJobs) { job in
+                    ForEach(state.cronJobs.filter { !onlyProblems || !$0.problems.isEmpty }) { job in
                         let owner = Owner(command: job.command)
-                        row(job.command, detail: "\(owner.name), \(job.summary)\(job.enabled ? "" : ", disabled")", owner: owner)
+                        row(job.command, detail: "\(owner.name), \(job.summary)\(job.enabled ? "" : ", disabled")",
+                            owner: owner, problem: job.problems.first)
                             .tag(Selection.cron(job.id))
                     }
                 }
             }
             .navigationSplitViewColumnWidth(min: 240, ideal: 300)
             .toolbar {
+                let count = state.problemCount
+                Toggle(isOn: $onlyProblems) {
+                    Label("\(count)", systemImage: "exclamationmark.triangle")
+                }
+                .toggleStyle(.button)
+                .labelStyle(.titleAndIcon)
+                .help("Show only jobs that need attention")
+                .accessibilityLabel("\(count) jobs need attention")
+                .disabled(count == 0 && !onlyProblems)
                 Menu {
                     Button("New LaunchAgent") { editing = .agent(nil) }
                     Button("New Cron Job") { editing = .cron(nil) }
@@ -100,12 +112,25 @@ struct ContentView: View {
         }
     }
 
-    private func row(_ title: String, detail: String, owner: Owner) -> some View {
+    /// A job with a problem gets a badge on its icon, and the problem
+    /// replaces the subtitle.
+    private func row(_ title: String, detail: String, owner: Owner, problem: Problem?) -> some View {
         HStack {
             OwnerIcon(owner: owner, size: 22)
+                .overlay(alignment: .bottomTrailing) {
+                    if problem != nil {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.orange)
+                            .offset(x: 4, y: 4)
+                    }
+                }
             VStack(alignment: .leading) {
                 Text(title).lineLimit(1)
-                Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(problem?.title ?? detail)
+                    .font(.caption)
+                    .foregroundStyle(problem == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+                    .lineLimit(1)
             }
         }
     }
@@ -123,9 +148,17 @@ struct AgentDetail: View {
             Section {
                 OwnerHeader(title: agent.label, owner: state.owner(agent))
             }
+            ProblemsSection(problems: state.problems(agent))
             Section {
                 LabeledContent("Status", value: state.statusText(agent))
                 LabeledContent("Schedule", value: agent.schedule)
+                LabeledContent("Next run", value: nextRun(loaded: loaded))
+                if !agent.logPaths.isEmpty {
+                    LabeledContent("Last output", value: lastOutput)
+                }
+                if loaded, let runs = Launchd.runs(agent) {
+                    LabeledContent("Runs since loaded", value: "\(runs)")
+                }
                 LabeledContent("Command") { Text(commandLine(agent.arguments)).textSelection(.enabled) }
                 LabeledContent("File") { Text(agent.url.path).textSelection(.enabled) }
             }
@@ -162,6 +195,54 @@ struct AgentDetail: View {
             Button("Move to Trash", role: .destructive) { state.perform { try Launchd.delete(agent, loaded: loaded) } }
         }
     }
+
+    private func nextRun(loaded: Bool) -> String {
+        guard loaded else { return "not loaded" }
+        let schedule = Schedule(plist: agent.plist)
+        if let date = schedule.nextRun(clockAligned: false) { return describe(date) }
+        switch schedule.kind {
+        case .interval: return "within \(schedule.every) \(schedule.every == 1 ? String(schedule.unit.rawValue.dropLast()) : schedule.unit.rawValue), counted from the last run"
+        case .atLogin: return "at next login"
+        default:
+            if agent.plist["KeepAlive"] != nil { return "keeps running" }
+            if agent.plist["WatchPaths"] != nil || agent.plist["QueueDirectories"] != nil { return "when watched files change" }
+            return "only when started"
+        }
+    }
+
+    /// launchd keeps no last-run time, so the log's modified date stands in.
+    private var lastOutput: String {
+        let dates = agent.logPaths.compactMap {
+            try? FileManager.default.attributesOfItem(atPath: $0)[.modificationDate] as? Date
+        }
+        return dates.max().map(describe) ?? "never"
+    }
+}
+
+/// "8 Oct 2026 at 18:00 (in 3 hours)"
+func describe(_ date: Date) -> String {
+    "\(date.formatted(date: .abbreviated, time: .shortened)) (\(date.formatted(.relative(presentation: .named))))"
+}
+
+struct ProblemsSection: View {
+    let problems: [Problem]
+
+    var body: some View {
+        if !problems.isEmpty {
+            Section("Needs attention") {
+                ForEach(problems, id: \.self) { problem in
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(problem.title)
+                            Text(problem.hint).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                        }
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    }
+                }
+            }
+        }
+    }
 }
 
 struct CronDetail: View {
@@ -176,8 +257,10 @@ struct CronDetail: View {
             Section {
                 OwnerHeader(title: job.command, owner: Owner(command: job.command))
             }
+            ProblemsSection(problems: job.problems)
             Section {
                 LabeledContent("Schedule", value: job.summary == job.schedule ? job.schedule : "\(job.summary) (\(job.schedule))")
+                LabeledContent("Next run", value: nextRun)
                 LabeledContent("Command") { Text(job.command).textSelection(.enabled) }
                 LabeledContent("Status", value: job.enabled ? "enabled" : "disabled")
             }
@@ -202,6 +285,14 @@ struct CronDetail: View {
                 deleted()
             }
         }
+    }
+
+    private var nextRun: String {
+        guard job.enabled else { return "disabled" }
+        let schedule = Schedule(cron: job.schedule)
+        if let date = schedule.nextRun(clockAligned: true) { return describe(date) }
+        return schedule.kind == .atLogin ? "at next startup" : "not calculated for custom schedules"
+
     }
 }
 

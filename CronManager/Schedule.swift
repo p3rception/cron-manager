@@ -119,6 +119,34 @@ struct Schedule: Equatable {
         }
     }
 
+    // MARK: next run
+
+    /// The next time this schedule fires. nil for login, custom and launchd
+    /// intervals, which count from when the job was loaded, not from the clock.
+    func nextRun(after date: Date = .now, clockAligned: Bool) -> Date? {
+        let calendar = Calendar.current
+        func next(_ c: DateComponents, policy: Calendar.MatchingPolicy = .nextTime) -> Date? {
+            calendar.nextDate(after: date, matching: c, matchingPolicy: policy)
+        }
+        switch kind {
+        case .interval:
+            guard clockAligned else { return nil }
+            // cron's */N fires on minutes (or hours) divisible by N.
+            let component: Calendar.Component = unit == .minutes ? .minute : .hour
+            guard var t = calendar.dateInterval(of: component, for: date)?.end else { return nil }
+            while calendar.component(component, from: t) % every != 0 {
+                t = calendar.date(byAdding: component, value: 1, to: t) ?? t
+            }
+            return t
+        case .hourly: return next(DateComponents(minute: minute))
+        case .daily: return next(DateComponents(hour: hour, minute: minute))
+        case .weekly: return weekdays.compactMap { next(DateComponents(hour: hour, minute: minute, weekday: $0 + 1)) }.min()
+        // Strict, so day 31 skips shorter months like cron and launchd do.
+        case .monthly: return next(DateComponents(day: day, hour: hour, minute: minute), policy: .strict)
+        case .atLogin, .custom: return nil
+        }
+    }
+
     // MARK: text
 
     /// `login` names the .atLogin case: "at login" for launchd, "at startup" for cron.

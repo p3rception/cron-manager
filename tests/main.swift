@@ -1,6 +1,8 @@
 // Parser checks, run with ./tests/run.sh. Swift Testing does not load under
 // Command Line Tools alone (lib_TestingInterop.dylib is missing), so this is
 // a plain executable.
+import Foundation
+
 let job = CronJob(id: 0, line: "0 0,12 * * *   /bin/echo  'a  b'")!
 assert(job.schedule == "0 0,12 * * *")
 assert(job.command == "/bin/echo  'a  b'")
@@ -62,4 +64,30 @@ assert(argumentList("~/bin/x", original: nil) == ["/bin/zsh", "-c", "~/bin/x"])
 assert(argumentList("echo 2", original: ["/bin/bash", "-c", "echo 1"]) == ["/bin/bash", "-c", "echo 2"])
 assert(slugify("Καθημερινό backup!") == "kathemerino-backup", slugify("Καθημερινό backup!"))
 assert(slugify("  Daily  Backup ") == "daily-backup")
+
+// Next run
+let cal = Calendar.current
+let wed = cal.date(from: DateComponents(year: 2026, month: 10, day: 7, hour: 10, minute: 7))!  // a Wednesday
+func at(_ d: Date?) -> DateComponents { cal.dateComponents([.year, .month, .day, .hour, .minute], from: d!) }
+assert(at(Schedule(cron: "*/15 * * * *").nextRun(after: wed, clockAligned: true)) == DateComponents(year: 2026, month: 10, day: 7, hour: 10, minute: 15))
+assert(at(Schedule(cron: "0 */6 * * *").nextRun(after: wed, clockAligned: true)) == DateComponents(year: 2026, month: 10, day: 7, hour: 12, minute: 0))
+assert(at(Schedule(cron: "30 9 * * *").nextRun(after: wed, clockAligned: true)) == DateComponents(year: 2026, month: 10, day: 8, hour: 9, minute: 30))
+assert(at(Schedule(cron: "0 9 * * 1,5").nextRun(after: wed, clockAligned: true)) == DateComponents(year: 2026, month: 10, day: 9, hour: 9, minute: 0))
+assert(at(Schedule(cron: "0 8 31 * *").nextRun(after: wed, clockAligned: true)) == DateComponents(year: 2026, month: 10, day: 31, hour: 8, minute: 0))
+assert(Schedule(plist: ["StartInterval": 900]).nextRun(after: wed, clockAligned: false) == nil)
+assert(Schedule(cron: "@reboot").nextRun(clockAligned: true) == nil)
+
+// Exit codes and program checks
+assert(exitMeaning(78) == "configuration error")
+assert(exitMeaning(0) == "success")
+assert(exitMeaning(-9) == "killed")
+assert(exitMeaning(137) == "killed")
+assert(programProblems(["/no/such/tool"]).map(\.title) == ["Program not found"])
+assert(programProblems(["/opt/homebrew/opt/nope/bin/nope"]).first!.hint.contains("brew install nope"))
+assert(programProblems(["/bin/bash", "/no/such.sh"]).map(\.title) == ["Script not found"])
+assert(programProblems(["/bin/zsh", "-c", "/no/such.sh --x"]).map(\.title) == ["Program not found"])
+assert(programProblems(["/bin/zsh", "-c", "echo hi"]).isEmpty)
+assert(programProblems(["/etc/hosts"]).map(\.title) == ["Program is not executable"])
+assert(CronJob(id: 0, line: "0 0 * * * /no/such.sh")!.problems.count == 1)
+assert(CronJob(id: 0, line: "#off 0 0 * * * /no/such.sh")!.problems.isEmpty)
 print("ok")

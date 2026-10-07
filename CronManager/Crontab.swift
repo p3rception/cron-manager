@@ -49,6 +49,13 @@ struct CronJob: Identifiable, Equatable {
 
     var summary: String { Schedule(cron: schedule).summary(login: "at startup") }
 
+    /// ponytail: commands with quotes are not checked, since splitting on
+    /// spaces would break quoted paths.
+    var problems: [Problem] {
+        guard enabled, !command.contains(where: { "\"'".contains($0) }) else { return [] }
+        return programProblems(command.split(whereSeparator: \.isWhitespace).map(String.init))
+    }
+
     /// The schedule is one @keyword or five fields.
     var hasValidShape: Bool {
         let n = schedule.split(whereSeparator: \.isWhitespace).count
