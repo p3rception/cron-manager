@@ -56,9 +56,16 @@ func check(_ tool: String, _ args: [String], input: String? = nil) throws -> Str
 let backupDir = FileManager.default.homeDirectoryForCurrentUser
     .appending(path: "Library/Application Support/CronManager")
 
+func backupURL(_ name: String) -> URL { backupDir.appending(path: name + ".bak") }
+
 func writeBackup(_ data: Data, name: String) throws {
     try FileManager.default.createDirectory(at: backupDir, withIntermediateDirectories: true)
-    try data.write(to: backupDir.appending(path: name + ".bak"), options: .atomic)
+    try data.write(to: backupURL(name), options: .atomic)
+}
+
+/// When the backup was written, or nil when there is none.
+func backupDate(_ name: String) -> Date? {
+    try? FileManager.default.attributesOfItem(atPath: backupURL(name).path)[.modificationDate] as? Date
 }
 
 /// The last 32 KB of a log file.

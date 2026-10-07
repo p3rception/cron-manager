@@ -192,6 +192,19 @@ enum Launchd {
         if loaded { try check(tool, ["bootstrap", domain, url.path]) }
     }
 
+    /// Swaps the plist with its backup, so restoring twice switches back.
+    static func restore(_ agent: Agent, loaded: Bool) throws {
+        let name = agent.url.lastPathComponent
+        let previous = try Data(contentsOf: backupURL(name))
+        guard (try? PropertyListSerialization.propertyList(from: previous, format: nil)) is [String: Any] else {
+            throw AppError("The saved version is not a valid plist.")
+        }
+        try writeBackup(Data(contentsOf: agent.url), name: name)
+        if loaded { try check(tool, ["bootout", "\(domain)/\(agent.label)"]) }
+        try previous.write(to: agent.url, options: .atomic)
+        if loaded { try check(tool, ["bootstrap", domain, agent.url.path]) }
+    }
+
     static func delete(_ agent: Agent, loaded: Bool) throws {
         if loaded { try check(tool, ["bootout", "\(domain)/\(agent.label)"]) }
         try FileManager.default.trashItem(at: agent.url, resultingItemURL: nil)

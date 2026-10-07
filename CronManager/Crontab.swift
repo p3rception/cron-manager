@@ -96,6 +96,14 @@ enum Crontab {
         return lines
     }
 
+    /// The crontab as it was before the last save.
+    static func backupLines() -> [String]? {
+        guard let text = try? String(contentsOf: backupURL("crontab"), encoding: .utf8) else { return nil }
+        var lines = text.components(separatedBy: "\n")
+        if lines.last == "" { lines.removeLast() }
+        return lines
+    }
+
     static func save(_ lines: [String]) throws {
         try writeBackup(Data(run(tool, ["-l"]).out.utf8), name: "crontab")
         // cron ignores a last line without a newline.

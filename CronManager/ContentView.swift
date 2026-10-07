@@ -169,9 +169,11 @@ struct AgentDetail: View {
     let edit: () -> Void
     let duplicate: () -> Void
     @State private var confirmDelete = false
+    @State private var confirmRestore = false
 
     var body: some View {
         let loaded = state.isLoaded(agent)
+        let backup = backupDate(agent.url.lastPathComponent)
         Form {
             Section {
                 OwnerHeader(title: agent.label, owner: state.owner(agent))
@@ -200,6 +202,8 @@ struct AgentDetail: View {
                     Menu("More") {
                         Button("Duplicate...", action: duplicate).disabled(agent.broken)
                         Button("Show Plist in Finder") { NSWorkspace.shared.activateFileViewerSelecting([agent.url]) }
+                        Divider()
+                        Button("Restore Previous Version...") { confirmRestore = true }.disabled(backup == nil)
                     }
                     .fixedSize()
                     Spacer()
@@ -211,6 +215,12 @@ struct AgentDetail: View {
         .formStyle(.grouped)
         .confirmationDialog("Move \(agent.label) to the Trash?", isPresented: $confirmDelete) {
             Button("Move to Trash", role: .destructive) { state.perform { try Launchd.delete(agent, loaded: loaded) } }
+        }
+        .confirmationDialog("Restore the version from \(backup.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "")?",
+                            isPresented: $confirmRestore) {
+            Button("Restore") { state.perform { try Launchd.restore(agent, loaded: loaded) } }
+        } message: {
+            Text("The current version is kept as the previous version, so you can switch back the same way.")
         }
     }
 
@@ -290,6 +300,7 @@ struct CronDetail: View {
     let duplicate: () -> Void
     let deleted: () -> Void
     @State private var confirmDelete = false
+    @State private var confirmRestore = false
     @State private var running = false
 
     var body: some View {
@@ -315,6 +326,9 @@ struct CronDetail: View {
                     Button("Edit", action: edit)
                     Menu("More") {
                         Button("Duplicate...", action: duplicate)
+                        Divider()
+                        Button("Restore Previous Crontab...") { confirmRestore = true }
+                            .disabled(backupDate("crontab") == nil)
                     }
                     .fixedSize()
                     Spacer()
@@ -325,6 +339,16 @@ struct CronDetail: View {
         }
         .formStyle(.grouped)
         .sheet(isPresented: $running) { RunSheet(command: job.command) }
+        .confirmationDialog("Restore the crontab from \(backupDate("crontab").map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "")?",
+                            isPresented: $confirmRestore) {
+            Button("Restore") {
+                guard let lines = Crontab.backupLines() else { return }
+                state.perform { try state.writeCron { $0 = lines } }
+                deleted()
+            }
+        } message: {
+            Text("It becomes:\n\n\((Crontab.backupLines() ?? []).joined(separator: "\n"))\n\nThe current crontab is kept as the previous version, so you can switch back.")
+        }
         .confirmationDialog("Delete this cron job?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) {
                 state.perform { try state.writeCron { $0.remove(at: job.id) } }
