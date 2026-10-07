@@ -8,4 +8,7 @@
 - Show the tail of a LaunchAgent's stdout and stderr logs
 - Pick schedules from a Repeat menu (interval, hourly, daily, weekly, monthly, at login) instead of cron syntax
 - New LaunchAgents need only a name and a command; label and log path are filled in
+- Show the app that owns each job, with Open and Show in Finder buttons, and flag jobs whose app is gone
+- New LaunchAgents are loaded and selected after saving
+- Logs update live, so Run Now output shows up
 - Install with `make` into /Applications so Spotlight finds the app

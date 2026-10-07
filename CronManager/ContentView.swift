@@ -37,13 +37,15 @@ struct ContentView: View {
             List(selection: $selection) {
                 Section("LaunchAgents") {
                     ForEach(state.agents) { agent in
-                        row(agent.label, detail: "\(state.statusText(agent)), \(agent.schedule)")
+                        let owner = state.owner(agent)
+                        row(agent.label, detail: "\(owner.name), \(state.statusText(agent)), \(agent.schedule)", owner: owner)
                             .tag(Selection.agent(agent.id))
                     }
                 }
                 Section("Crontab") {
                     ForEach(state.cronJobs) { job in
-                        row(job.command, detail: job.enabled ? job.schedule : "\(job.schedule), disabled")
+                        let owner = Owner(command: job.command)
+                        row(job.command, detail: "\(owner.name), \(job.summary)\(job.enabled ? "" : ", disabled")", owner: owner)
                             .tag(Selection.cron(job.id))
                     }
                 }
@@ -77,12 +79,18 @@ struct ContentView: View {
                 AgentEditor(original: original) { plist in
                     try Launchd.save(plist, replacing: original, loaded: original.map(state.isLoaded) ?? false)
                     state.refresh()
+                    // A new job is loaded right away, otherwise it would not run until the next login.
+                    if original == nil, let agent = state.agents.first(where: { $0.label == plist["Label"] as? String }) {
+                        selection = .agent(agent.id)
+                        state.perform { try Launchd.load(agent) }
+                    }
                 }
             case .cron(let original):
                 CronEditor(original: original) { job in
                     try state.writeCron { lines in
                         if let original { lines[original.id] = job.line } else { lines.append(job.line) }
                     }
+                    if original == nil { selection = .cron(state.cronLines.count - 1) }
                 }
             }
         }
@@ -92,10 +100,13 @@ struct ContentView: View {
         }
     }
 
-    private func row(_ title: String, detail: String) -> some View {
-        VStack(alignment: .leading) {
-            Text(title).lineLimit(1)
-            Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+    private func row(_ title: String, detail: String, owner: Owner) -> some View {
+        HStack {
+            OwnerIcon(owner: owner, size: 22)
+            VStack(alignment: .leading) {
+                Text(title).lineLimit(1)
+                Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
         }
     }
 }
@@ -109,10 +120,13 @@ struct AgentDetail: View {
     var body: some View {
         let loaded = state.isLoaded(agent)
         Form {
-            Section(agent.label) {
+            Section {
+                OwnerHeader(title: agent.label, owner: state.owner(agent))
+            }
+            Section {
                 LabeledContent("Status", value: state.statusText(agent))
                 LabeledContent("Schedule", value: agent.schedule)
-                LabeledContent("Command") { Text(agent.arguments.joined(separator: " ")).textSelection(.enabled) }
+                LabeledContent("Command") { Text(commandLine(agent.arguments)).textSelection(.enabled) }
                 LabeledContent("File") { Text(agent.url.path).textSelection(.enabled) }
             }
             Section {
@@ -122,7 +136,7 @@ struct AgentDetail: View {
                     }
                     Button("Run Now") { state.perform { try Launchd.kickstart(agent) } }.disabled(!loaded)
                     Button("Edit", action: edit).disabled(agent.broken)
-                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([agent.url]) }
+                    Button("Show Plist in Finder") { NSWorkspace.shared.activateFileViewerSelecting([agent.url]) }
                     Spacer()
                     Button("Delete", role: .destructive) { confirmDelete = true }
                 }
@@ -130,10 +144,13 @@ struct AgentDetail: View {
             ForEach(agent.logPaths, id: \.self) { path in
                 Section(path) {
                     ScrollView {
-                        Text(tail(path))
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        // Rereads the file so output from Run Now shows up live.
+                        TimelineView(.periodic(from: .now, by: 2)) { _ in
+                            Text(tail(path))
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                     .defaultScrollAnchor(.bottom)
                     .frame(minHeight: 120, maxHeight: 300)
@@ -157,7 +174,10 @@ struct CronDetail: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("Schedule", value: job.schedule)
+                OwnerHeader(title: job.command, owner: Owner(command: job.command))
+            }
+            Section {
+                LabeledContent("Schedule", value: job.summary == job.schedule ? job.schedule : "\(job.summary) (\(job.schedule))")
                 LabeledContent("Command") { Text(job.command).textSelection(.enabled) }
                 LabeledContent("Status", value: job.enabled ? "enabled" : "disabled")
             }
@@ -182,5 +202,61 @@ struct CronDetail: View {
                 deleted()
             }
         }
+    }
+}
+
+struct OwnerIcon: View {
+    let owner: Owner
+    let size: CGFloat
+
+    var body: some View {
+        if owner.isApp, let url = owner.url {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                .resizable()
+                .frame(width: size, height: size)
+        } else {
+            Image(systemName: owner.symbol)
+                .font(.system(size: size * 0.7))
+                .foregroundStyle(.secondary)
+                .frame(width: size, height: size)
+        }
+    }
+}
+
+/// The top of a detail view: the owner's icon, what owns the job and
+/// buttons to open the app or find the script.
+struct OwnerHeader: View {
+    let title: String
+    let owner: Owner
+
+    var body: some View {
+        HStack(spacing: 12) {
+            OwnerIcon(owner: owner, size: 48)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+                Text(subtitle).font(.callout).foregroundStyle(.secondary)
+                if let url = owner.url {
+                    HStack {
+                        if owner.isApp {
+                            Button("Open \(owner.name)") { NSWorkspace.shared.open(url) }
+                        }
+                        Button(owner.isApp ? "Show App in Finder" : "Show Script in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([url])
+                        }
+                    }
+                    .controlSize(.small)
+                }
+            }
+        }
+    }
+
+    private var subtitle: String {
+        let name = owner.isApp ? "Added by \(owner.name)" : owner.name
+        guard let url = owner.url else { return name }
+        return "\(name), \((url.path as NSString).abbreviatingWithTildeInPath)"
     }
 }

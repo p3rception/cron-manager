@@ -6,6 +6,8 @@ import Observation
 final class AppState {
     var agents: [Agent] = []
     var status: [String: AgentStatus] = [:]
+    /// By agent id. Cached because owner lookups query Launch Services.
+    var owners: [String: Owner] = [:]
     var cronLines: [String] = []
     var error: String?
 
@@ -15,9 +17,12 @@ final class AppState {
 
     func refresh() {
         agents = Launchd.agents()
+        owners = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, Owner(agent: $0)) })
         status = Launchd.status()
         do { cronLines = try Crontab.load() } catch { self.error = error.localizedDescription }
     }
+
+    func owner(_ agent: Agent) -> Owner { owners[agent.id] ?? Owner(agent: agent) }
 
     func isLoaded(_ agent: Agent) -> Bool { status[agent.label] != nil }
 
