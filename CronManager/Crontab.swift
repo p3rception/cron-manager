@@ -101,13 +101,4 @@ enum Crontab {
         // cron ignores a last line without a newline.
         try check(tool, ["-"], input: lines.map { $0 + "\n" }.joined())
     }
-
-    /// ponytail: runs with the app's environment, not cron's minimal one, and
-    /// discards output.
-    static func runNow(_ job: CronJob) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", job.command]
-        try process.run()
-    }
 }

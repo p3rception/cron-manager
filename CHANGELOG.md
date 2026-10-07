@@ -18,4 +18,5 @@
 - Search jobs by label, owner or command
 - Set a LaunchAgent's working folder and environment variables, with a button that adds Homebrew to PATH
 - Save a cron job's output to a log file and view it live
+- Run Now for cron jobs shows the output live, with the exit status and a Stop button
 - Install with `make` into /Applications so Spotlight finds the app

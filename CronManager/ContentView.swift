@@ -267,6 +267,7 @@ struct CronDetail: View {
     let edit: () -> Void
     let deleted: () -> Void
     @State private var confirmDelete = false
+    @State private var running = false
 
     var body: some View {
         Form {
@@ -287,7 +288,7 @@ struct CronDetail: View {
                         toggled.enabled.toggle()
                         state.perform { try state.writeCron { $0[job.id] = toggled.line } }
                     }
-                    Button("Run Now") { state.perform { try Crontab.runNow(job) } }
+                    Button("Run Now") { running = true }
                     Button("Edit", action: edit)
                     Spacer()
                     Button("Delete", role: .destructive) { confirmDelete = true }
@@ -296,6 +297,7 @@ struct CronDetail: View {
             if let log = job.logPath { LogSection(path: log) }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $running) { RunSheet(command: job.command) }
         .confirmationDialog("Delete this cron job?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) {
                 state.perform { try state.writeCron { $0.remove(at: job.id) } }
@@ -366,5 +368,96 @@ struct OwnerHeader: View {
         let name = owner.isApp ? "Added by \(owner.name)" : owner.name
         guard let url = owner.url else { return name }
         return "\(name), \((url.path as NSString).abbreviatingWithTildeInPath)"
+    }
+}
+
+/// Runs a cron command and streams its output until it exits or is stopped.
+struct RunSheet: View {
+    let command: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var runner = Runner()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(command).font(.headline).lineLimit(2).textSelection(.enabled)
+            ScrollView {
+                Text(runner.output.isEmpty ? (runner.running ? "Waiting for output..." : "(no output)") : runner.output)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .defaultScrollAnchor(.bottom)
+            .padding(8)
+            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 6))
+            Text("Runs with this app's environment, which has more in PATH than cron gives the job.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                if runner.running {
+                    ProgressView().controlSize(.small)
+                    Text("Running")
+                } else if let code = runner.exitCode {
+                    Text(code == 0 ? "Finished" : "Failed: \(code < 0 ? "signal \(-code)" : "exit \(code)"), \(exitMeaning(code))")
+                }
+                Spacer()
+                if runner.running {
+                    Button("Stop") { runner.stop() }
+                }
+                Button("Close") {
+                    runner.stop()
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding()
+        .frame(width: 640, height: 440)
+        .onAppear { runner.start(command) }
+    }
+}
+
+/// The process behind RunSheet. Pipe and exit callbacks arrive on
+/// background threads and hop to the main actor before touching state.
+@MainActor
+@Observable
+final class Runner {
+    var output = ""
+    var running = false
+    /// Exit status, or minus the signal number.
+    var exitCode: Int?
+    private var process: Process?
+
+    func start(_ command: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", command]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { handle.readabilityHandler = nil; return }
+            let text = String(decoding: data, as: UTF8.self)
+            Task { @MainActor in self?.output += text }
+        }
+        process.terminationHandler = { [weak self] p in
+            let code = p.terminationReason == .uncaughtSignal ? -Int(p.terminationStatus) : Int(p.terminationStatus)
+            Task { @MainActor in
+                self?.running = false
+                self?.exitCode = code
+            }
+        }
+        do {
+            try process.run()
+            running = true
+            self.process = process
+        } catch {
+            output = error.localizedDescription
+        }
+    }
+
+    /// ponytail: SIGTERM reaches sh and the command it runs, not processes
+    /// those start in the background.
+    func stop() {
+        if process?.isRunning == true { process?.terminate() }
     }
 }
