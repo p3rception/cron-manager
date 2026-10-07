@@ -166,6 +166,15 @@ struct CronEditor: View {
     @State private var command = ""
     @State private var schedule = Schedule()
     @State private var enabled = true
+    @State private var logOn = true
+    @State private var log = ""
+
+    /// ~/Library/Logs/<script name>.log, from the command's first word.
+    private var defaultLog: String {
+        let first = command.split(separator: " ").first.map { (String($0) as NSString).lastPathComponent } ?? ""
+        let name = slugify((first as NSString).deletingPathExtension)
+        return FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/\(name.isEmpty ? "cron-job" : name).log"
+    }
 
     var body: some View {
         EditorSheet(submit: submit) {
@@ -174,21 +183,37 @@ struct CronEditor: View {
                 Toggle("Enabled", isOn: $enabled)
             }
             ScheduleFields(schedule: $schedule, cron: true)
+            Section {
+                Toggle("Save output to \(((log.isEmpty ? defaultLog : log) as NSString).abbreviatingWithTildeInPath)", isOn: $logOn)
+                if logOn {
+                    TextField("Log file", text: $log, prompt: Text(defaultLog))
+                }
+            } footer: {
+                Text("Without a log, cron mails the output to your local mailbox, where it is easy to miss.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .onAppear {
             guard let original else { return }
-            command = original.command
+            command = original.baseCommand
             schedule = Schedule(cron: original.schedule)
             enabled = original.enabled
+            log = original.logPath ?? ""
+            logOn = original.logPath != nil
         }
     }
 
     private func submit() throws {
+        let base = command.trimmingCharacters(in: .whitespaces)
+        guard !base.isEmpty, !base.contains("\n") else { throw AppError("Enter a one-line command.") }
+        let logFile = log.trimmingCharacters(in: .whitespaces).isEmpty ? defaultLog : (log as NSString).expandingTildeInPath
+        if logOn, !FileManager.default.fileExists(atPath: (logFile as NSString).deletingLastPathComponent) {
+            throw AppError("The folder for \(logFile) does not exist.")
+        }
         let job = CronJob(id: original?.id ?? -1,
                           schedule: schedule.cronExpression,
-                          command: command.trimmingCharacters(in: .whitespaces),
+                          command: CronJob.command(base, log: logOn ? logFile : nil),
                           enabled: enabled)
-        guard !job.command.isEmpty, !job.command.contains("\n") else { throw AppError("Enter a one-line command.") }
         guard job.hasValidShape else { throw AppError("A cron schedule needs five fields or one @keyword.") }
         if schedule.kind == .weekly, schedule.weekdays.isEmpty { throw AppError("Pick at least one day.") }
         if let problem = schedule.cronProblem { throw AppError(problem) }

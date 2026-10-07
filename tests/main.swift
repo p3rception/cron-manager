@@ -111,4 +111,12 @@ assert(programProblems(["/bin/zsh", "-c", "echo hi"]).isEmpty)
 assert(programProblems(["/etc/hosts"]).map(\.title) == ["Program is not executable"])
 assert(CronJob(id: 0, line: "0 0 * * * /no/such.sh")!.problems.count == 1)
 assert(CronJob(id: 0, line: "#off 0 0 * * * /no/such.sh")!.problems.isEmpty)
+
+// Cron log redirects
+let logged = CronJob(id: 0, line: "0 0 * * * /a/b.sh --x >> '/Users/per/Library/Logs/my log.log' 2>&1")!
+assert(logged.baseCommand == "/a/b.sh --x" && logged.logPath == "/Users/per/Library/Logs/my log.log")
+assert(CronJob.command(logged.baseCommand, log: logged.logPath) == "/a/b.sh --x >> '/Users/per/Library/Logs/my log.log' 2>&1")
+assert(CronJob(id: 0, line: "0 0 * * * /a/b.sh >>/tmp/x.log 2>&1")!.logPath == "/tmp/x.log")
+assert(CronJob(id: 0, line: "0 0 * * * /a/b.sh > /tmp/x.log")!.logPath == nil)
+assert(CronJob.command("/a/b.sh", log: nil) == "/a/b.sh")
 print("ok")

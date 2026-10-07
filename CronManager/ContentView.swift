@@ -48,7 +48,7 @@ struct ContentView: View {
                 Section("Crontab") {
                     ForEach(state.cronJobs.filter { (!onlyProblems || !$0.problems.isEmpty) && matches(search, $0.command) }) { job in
                         let owner = Owner(command: job.command)
-                        row(job.command, detail: "\(owner.name), \(job.summary)\(job.enabled ? "" : ", disabled")",
+                        row(job.baseCommand, detail: "\(owner.name), \(job.summary)\(job.enabled ? "" : ", disabled")",
                             owner: owner, problem: job.problems.first)
                             .tag(Selection.cron(job.id))
                     }
@@ -184,21 +184,7 @@ struct AgentDetail: View {
                     Button("Delete", role: .destructive) { confirmDelete = true }
                 }
             }
-            ForEach(agent.logPaths, id: \.self) { path in
-                Section(path) {
-                    ScrollView {
-                        // Rereads the file so output from Run Now shows up live.
-                        TimelineView(.periodic(from: .now, by: 2)) { _ in
-                            Text(tail(path))
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .defaultScrollAnchor(.bottom)
-                    .frame(minHeight: 120, maxHeight: 300)
-                }
-            }
+            ForEach(agent.logPaths, id: \.self) { LogSection(path: $0) }
         }
         .formStyle(.grouped)
         .confirmationDialog("Move \(agent.label) to the Trash?", isPresented: $confirmDelete) {
@@ -226,6 +212,26 @@ struct AgentDetail: View {
             try? FileManager.default.attributesOfItem(atPath: $0)[.modificationDate] as? Date
         }
         return dates.max().map(describe) ?? "never"
+    }
+}
+
+struct LogSection: View {
+    let path: String
+
+    var body: some View {
+        Section(path) {
+            ScrollView {
+                // Rereads the file so output from Run Now shows up live.
+                TimelineView(.periodic(from: .now, by: 2)) { _ in
+                    Text(tail(path))
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .defaultScrollAnchor(.bottom)
+            .frame(minHeight: 120, maxHeight: 300)
+        }
     }
 }
 
@@ -265,13 +271,13 @@ struct CronDetail: View {
     var body: some View {
         Form {
             Section {
-                OwnerHeader(title: job.command, owner: Owner(command: job.command))
+                OwnerHeader(title: job.baseCommand, owner: Owner(command: job.command))
             }
             ProblemsSection(problems: job.problems)
             Section {
                 LabeledContent("Schedule", value: job.summary == job.schedule ? job.schedule : "\(job.summary) (\(job.schedule))")
                 LabeledContent("Next run", value: nextRun)
-                LabeledContent("Command") { Text(job.command).textSelection(.enabled) }
+                LabeledContent("Command") { Text(job.baseCommand).textSelection(.enabled) }
                 LabeledContent("Status", value: job.enabled ? "enabled" : "disabled")
             }
             Section {
@@ -287,6 +293,7 @@ struct CronDetail: View {
                     Button("Delete", role: .destructive) { confirmDelete = true }
                 }
             }
+            if let log = job.logPath { LogSection(path: log) }
         }
         .formStyle(.grouped)
         .confirmationDialog("Delete this cron job?", isPresented: $confirmDelete) {

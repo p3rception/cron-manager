@@ -47,6 +47,23 @@ struct CronJob: Identifiable, Equatable {
         self.command = String(command)
     }
 
+    /// The command without a trailing `>> file 2>&1`, and that file.
+    var baseCommand: String { splitLog.command }
+    var logPath: String? { splitLog.log }
+
+    private var splitLog: (command: String, log: String?) {
+        guard let match = command.firstMatch(of: #/\s*>>\s*('[^']*'|[^\s'"]+)\s+2>&1\s*$/#) else { return (command, nil) }
+        var path = String(match.1)
+        if path.hasPrefix("'") { path = String(path.dropFirst().dropLast()) }
+        return (String(command[..<match.range.lowerBound]), (path as NSString).expandingTildeInPath)
+    }
+
+    /// Joins a command and an optional log file into one cron command.
+    static func command(_ base: String, log: String?) -> String {
+        guard let log, !log.isEmpty else { return base }
+        return "\(base) >> \(shellQuote(log)) 2>&1"
+    }
+
     var summary: String { Schedule(cron: schedule).summary(login: "at startup") }
 
     /// ponytail: commands with quotes are not checked, since splitting on
