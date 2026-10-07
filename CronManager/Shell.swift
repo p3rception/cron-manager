@@ -63,7 +63,8 @@ func writeBackup(_ data: Data, name: String) throws {
 
 /// The last 32 KB of a log file.
 func tail(_ path: String) -> String {
-    guard let handle = FileHandle(forReadingAtPath: path) else { return "(cannot read \(path))" }
+    guard FileManager.default.fileExists(atPath: path) else { return "(no log yet, the job has not written to this file)" }
+    guard let handle = FileHandle(forReadingAtPath: path) else { return "(no permission to read this file)" }
     defer { try? handle.close() }
     let size = (try? handle.seekToEnd()) ?? 0
     try? handle.seek(toOffset: size > 32_768 ? size - 32_768 : 0)
