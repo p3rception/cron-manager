@@ -71,3 +71,39 @@ func tail(_ path: String) -> String {
     let text = String(decoding: handle.readDataToEndOfFile(), as: UTF8.self)
     return text.isEmpty ? "(empty)" : text
 }
+
+private func isPlain(_ c: Character) -> Bool { c.isLetter || c.isNumber || "-_./=:@%+,".contains(c) }
+
+/// Quotes a word for /bin/sh when it has anything besides plain characters.
+func shellQuote(_ word: String) -> String {
+    !word.isEmpty && word.allSatisfy(isPlain) ? word : "'" + word.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
+}
+
+/// A launchd argument list as one shell command line. `sh -c "..."` style
+/// lists show just the inner command.
+func commandLine(_ argv: [String]) -> String {
+    if isShellCommand(argv) { return argv[2] }
+    return argv.map(shellQuote).joined(separator: " ")
+}
+
+func isShellCommand(_ argv: [String]) -> Bool {
+    argv.count == 3 && argv[1] == "-c" && ["sh", "bash", "zsh"].contains((argv[0] as NSString).lastPathComponent)
+}
+
+/// The argument list for an edited command line. An unchanged line keeps
+/// `original`. A plain absolute path with plain arguments runs directly;
+/// anything else runs through the original job's shell, or zsh.
+func argumentList(_ command: String, original: [String]?) -> [String] {
+    if let original, commandLine(original) == command { return original }
+    if command.hasPrefix("/"), command.allSatisfy({ isPlain($0) || $0 == " " }) {
+        return command.split(separator: " ").map(String.init)
+    }
+    let shell = original.flatMap { isShellCommand($0) ? $0[0] : nil } ?? "/bin/zsh"
+    return [shell, "-c", command]
+}
+
+/// "Καθημερινό backup" becomes "kathemerino-backup", for labels and log names.
+func slugify(_ name: String) -> String {
+    let latin = name.applyingTransform(.toLatin, reverse: false)?.applyingTransform(.stripDiacritics, reverse: false) ?? name
+    return latin.lowercased().replacing(#/[^a-z0-9]+/#, with: "-").trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+}

@@ -30,6 +30,12 @@ struct Agent: Identifiable {
     }
 
     var schedule: String {
+        let parsed = Schedule(plist: plist)
+        return parsed.kind == .custom ? rawSchedule : parsed.summary(login: "at login")
+    }
+
+    /// Describes schedules the editor cannot represent.
+    var rawSchedule: String {
         if let n = plist["StartInterval"] as? Int { return "every \(n) s" }
         if let value = plist["StartCalendarInterval"] {
             let dicts = value as? [[String: Int]] ?? [value as? [String: Int] ?? [:]]

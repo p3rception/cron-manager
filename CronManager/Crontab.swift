@@ -47,6 +47,8 @@ struct CronJob: Identifiable, Equatable {
         self.command = String(command)
     }
 
+    var summary: String { Schedule(cron: schedule).summary(login: "at startup") }
+
     /// The schedule is one @keyword or five fields.
     var hasValidShape: Bool {
         let n = schedule.split(whereSeparator: \.isWhitespace).count
