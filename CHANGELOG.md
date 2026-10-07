@@ -15,4 +15,5 @@
 - Flag jobs that need attention (missing program, script or log folder, empty plist, failed last run) and filter the list to them
 - Explain exit codes in plain words, such as 78 configuration error
 - Show next run, last output and runs since loaded
+- Search jobs by label, owner or command
 - Install with `make` into /Applications so Spotlight finds the app

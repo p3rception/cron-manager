@@ -32,12 +32,13 @@ struct ContentView: View {
     @State private var selection: Selection?
     @State private var editing: Editing?
     @State private var onlyProblems = false
+    @State private var search = ""
 
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
                 Section("LaunchAgents") {
-                    ForEach(state.agents.filter { !onlyProblems || !state.problems($0).isEmpty }) { agent in
+                    ForEach(state.agents.filter { (!onlyProblems || !state.problems($0).isEmpty) && matches(agent: $0) }) { agent in
                         let owner = state.owner(agent)
                         row(agent.label, detail: "\(owner.name), \(state.statusText(agent)), \(agent.schedule)",
                             owner: owner, problem: state.problems(agent).first)
@@ -45,7 +46,7 @@ struct ContentView: View {
                     }
                 }
                 Section("Crontab") {
-                    ForEach(state.cronJobs.filter { !onlyProblems || !$0.problems.isEmpty }) { job in
+                    ForEach(state.cronJobs.filter { (!onlyProblems || !$0.problems.isEmpty) && matches(search, $0.command) }) { job in
                         let owner = Owner(command: job.command)
                         row(job.command, detail: "\(owner.name), \(job.summary)\(job.enabled ? "" : ", disabled")",
                             owner: owner, problem: job.problems.first)
@@ -54,6 +55,7 @@ struct ContentView: View {
                 }
             }
             .navigationSplitViewColumnWidth(min: 240, ideal: 300)
+            .searchable(text: $search, placement: .sidebar, prompt: "Label, owner or command")
             .toolbar {
                 let count = state.problemCount
                 Toggle(isOn: $onlyProblems) {
@@ -110,6 +112,14 @@ struct ContentView: View {
         } message: {
             Text(state.error ?? "")
         }
+    }
+
+    private func matches(agent: Agent) -> Bool {
+        matches(search, agent.label, state.owner(agent).name, commandLine(agent.arguments))
+    }
+
+    private func matches(_ query: String, _ fields: String...) -> Bool {
+        query.isEmpty || fields.contains { $0.localizedStandardContains(query) }
     }
 
     /// A job with a problem gets a badge on its icon, and the problem
