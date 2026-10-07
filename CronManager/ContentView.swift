@@ -18,11 +18,15 @@ enum Selection: Hashable {
 enum Editing: Identifiable {
     case agent(Agent?)
     case cron(CronJob?)
+    case copyAgent(Agent)
+    case copyCron(CronJob)
 
     var id: String {
         switch self {
         case .agent(let a): "agent:\(a?.id ?? "new")"
         case .cron(let j): "cron:\(j.map { String($0.id) } ?? "new")"
+        case .copyAgent(let a): "copy:\(a.id)"
+        case .copyCron(let j): "copy-cron:\(j.id)"
         }
     }
 }
@@ -77,11 +81,12 @@ struct ContentView: View {
             switch selection {
             case .agent(let id):
                 if let agent = state.agents.first(where: { $0.id == id }) {
-                    AgentDetail(state: state, agent: agent) { editing = .agent(agent) }
+                    AgentDetail(state: state, agent: agent, edit: { editing = .agent(agent) }, duplicate: { editing = .copyAgent(agent) })
                 }
             case .cron(let id):
                 if let job = state.cronJobs.first(where: { $0.id == id }) {
-                    CronDetail(state: state, job: job, edit: { editing = .cron(job) }, deleted: { selection = nil })
+                    CronDetail(state: state, job: job, edit: { editing = .cron(job) }, duplicate: { editing = .copyCron(job) },
+                               deleted: { selection = nil })
                 }
             case nil:
                 Text("Select a job").foregroundStyle(.secondary)
@@ -90,27 +95,39 @@ struct ContentView: View {
         .sheet(item: $editing) { item in
             switch item {
             case .agent(let original):
-                AgentEditor(original: original) { plist in
-                    try Launchd.save(plist, replacing: original, loaded: original.map(state.isLoaded) ?? false)
-                    state.refresh()
-                    // A new job is loaded right away, otherwise it would not run until the next login.
-                    if original == nil, let agent = state.agents.first(where: { $0.label == plist["Label"] as? String }) {
-                        selection = .agent(agent.id)
-                        state.perform { try Launchd.load(agent) }
-                    }
-                }
+                agentEditor(original: original, template: nil)
+            case .copyAgent(let template):
+                agentEditor(original: nil, template: template)
             case .cron(let original):
-                CronEditor(original: original) { job in
-                    try state.writeCron { lines in
-                        if let original { lines[original.id] = job.line } else { lines.append(job.line) }
-                    }
-                    if original == nil { selection = .cron(state.cronLines.count - 1) }
-                }
+                cronEditor(original: original, template: nil)
+            case .copyCron(let template):
+                cronEditor(original: nil, template: template)
             }
         }
         .alert("Error", isPresented: Binding(get: { state.error != nil }, set: { if !$0 { state.error = nil } })) {
         } message: {
             Text(state.error ?? "")
+        }
+    }
+
+    private func agentEditor(original: Agent?, template: Agent?) -> some View {
+        AgentEditor(original: original, template: template) { plist in
+            try Launchd.save(plist, replacing: original, loaded: original.map(state.isLoaded) ?? false)
+            state.refresh()
+            // A new job is loaded right away, otherwise it would not run until the next login.
+            if original == nil, let agent = state.agents.first(where: { $0.label == plist["Label"] as? String }) {
+                selection = .agent(agent.id)
+                state.perform { try Launchd.load(agent) }
+            }
+        }
+    }
+
+    private func cronEditor(original: CronJob?, template: CronJob?) -> some View {
+        CronEditor(original: original, template: template) { job in
+            try state.writeCron { lines in
+                if let original { lines[original.id] = job.line } else { lines.append(job.line) }
+            }
+            if original == nil { selection = .cron(state.cronLines.count - 1) }
         }
     }
 
@@ -150,6 +167,7 @@ struct AgentDetail: View {
     let state: AppState
     let agent: Agent
     let edit: () -> Void
+    let duplicate: () -> Void
     @State private var confirmDelete = false
 
     var body: some View {
@@ -179,7 +197,11 @@ struct AgentDetail: View {
                     }
                     Button("Run Now") { state.perform { try Launchd.kickstart(agent) } }.disabled(!loaded)
                     Button("Edit", action: edit).disabled(agent.broken)
-                    Button("Show Plist in Finder") { NSWorkspace.shared.activateFileViewerSelecting([agent.url]) }
+                    Menu("More") {
+                        Button("Duplicate...", action: duplicate).disabled(agent.broken)
+                        Button("Show Plist in Finder") { NSWorkspace.shared.activateFileViewerSelecting([agent.url]) }
+                    }
+                    .fixedSize()
                     Spacer()
                     Button("Delete", role: .destructive) { confirmDelete = true }
                 }
@@ -265,6 +287,7 @@ struct CronDetail: View {
     let state: AppState
     let job: CronJob
     let edit: () -> Void
+    let duplicate: () -> Void
     let deleted: () -> Void
     @State private var confirmDelete = false
     @State private var running = false
@@ -290,6 +313,10 @@ struct CronDetail: View {
                     }
                     Button("Run Now") { running = true }
                     Button("Edit", action: edit)
+                    Menu("More") {
+                        Button("Duplicate...", action: duplicate)
+                    }
+                    .fixedSize()
                     Spacer()
                     Button("Delete", role: .destructive) { confirmDelete = true }
                 }

@@ -1,8 +1,10 @@
 import SwiftUI
 
 /// Creates or edits a LaunchAgent. Keys the form does not show are kept.
+/// With `template`, it creates a new job prefilled from that one.
 struct AgentEditor: View {
     let original: Agent?
+    var template: Agent? = nil
     let save: ([String: Any]) throws -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -41,7 +43,7 @@ struct AgentEditor: View {
                 CommandField(command: $command)
             }
             ScheduleFields(schedule: $schedule, cron: false,
-                           keepsCustom: original.map { Schedule(plist: $0.plist).kind == .custom } ?? false)
+                           keepsCustom: source.map { Schedule(plist: $0.plist).kind == .custom } ?? false)
             Section {
                 Toggle(isOn: Binding(get: { logOn }, set: { on in
                     logOn = on
@@ -78,16 +80,19 @@ struct AgentEditor: View {
     }
 
     private func load() {
-        guard let original else { return nameFocused = true }
-        let p = original.plist
-        label = original.label
-        command = commandLine(original.arguments)
+        nameFocused = original == nil
+        guard let source else { return }
+        let p = source.plist
+        label = source.label + (original == nil ? "-copy" : "")
+        command = commandLine(source.arguments)
         schedule = Schedule(plist: p)
-        if schedule.kind == .custom { schedule.custom = original.rawSchedule }
+        if schedule.kind == .custom { schedule.custom = source.rawSchedule }
         runAtLoad = schedule.kind != .atLogin && p["RunAtLoad"] as? Bool == true
         stdout = p["StandardOutPath"] as? String ?? ""
         stderr = p["StandardErrorPath"] as? String ?? ""
         logOn = !stdout.isEmpty || !stderr.isEmpty
+        // A copy writes its own log, named after its label.
+        if original == nil { stdout = ""; stderr = "" }
         workingDirectory = p["WorkingDirectory"] as? String ?? ""
         environment = (p["EnvironmentVariables"] as? [String: String] ?? [:])
             .sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "\n")
@@ -112,6 +117,8 @@ struct AgentEditor: View {
         return result
     }
 
+    private var source: Agent? { original ?? template }
+
     private func submit() throws {
         try save(build())
         dismiss()
@@ -121,15 +128,15 @@ struct AgentEditor: View {
         guard original != nil || !slug.isEmpty || !label.isEmpty else { throw AppError("Enter a name.") }
         let line = command.trimmingCharacters(in: .whitespaces)
         guard !line.isEmpty else { throw AppError("Enter a command.") }
-        let argv = argumentList(line, original: original?.arguments)
-        if argv != original?.arguments, !isShellCommand(argv), !FileManager.default.isExecutableFile(atPath: argv[0]) {
+        let argv = argumentList(line, original: source?.arguments)
+        if argv != source?.arguments, !isShellCommand(argv), !FileManager.default.isExecutableFile(atPath: argv[0]) {
             throw AppError("\(argv[0]) is not executable. Run chmod +x on it, or start the command with /bin/bash.")
         }
         if schedule.kind == .weekly, schedule.weekdays.isEmpty { throw AppError("Pick at least one day.") }
 
-        var p = original?.plist ?? [:]
+        var p = source?.plist ?? [:]
         p["Label"] = effectiveLabel
-        if argv != original?.arguments {
+        if argv != source?.arguments {
             p["ProgramArguments"] = argv
             // Program would override argv[0].
             p["Program"] = nil
@@ -160,6 +167,8 @@ struct AgentEditor: View {
 
 struct CronEditor: View {
     let original: CronJob?
+    /// Prefills a new job, for Duplicate.
+    var template: CronJob? = nil
     let save: (CronJob) throws -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -194,12 +203,12 @@ struct CronEditor: View {
             }
         }
         .onAppear {
-            guard let original else { return }
-            command = original.baseCommand
-            schedule = Schedule(cron: original.schedule)
-            enabled = original.enabled
-            log = original.logPath ?? ""
-            logOn = original.logPath != nil
+            guard let source = original ?? template else { return }
+            command = source.baseCommand
+            schedule = Schedule(cron: source.schedule)
+            enabled = source.enabled
+            log = source.logPath ?? ""
+            logOn = source.logPath != nil
         }
     }
 
