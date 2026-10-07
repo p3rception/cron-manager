@@ -8,6 +8,7 @@ GUI to manage cron and launchd jobs
 
 ## Commands
 
+- `make` builds, installs to /Applications and opens the app; `make test` runs the parser check
 - `./build.sh` builds dist/CronManager.app and launches it (`./build.sh build` skips launch)
 - `./tests/run.sh` runs the crontab parser check
 
