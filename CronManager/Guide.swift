@@ -53,7 +53,7 @@ enum Glossary {
         Term(id: "command", name: "Command",
              definition: "What the job runs: a program or script path, optionally with arguments. Shell syntax such as pipes and && works too. Use Choose... to pick a file."),
         Term(id: "log", name: "Log file",
-             definition: "A text file that collects what the job prints (stdout) and its errors (stderr). Logs are the first place to look when a job fails. Cron Manager uses ~/Library/Logs by default."),
+             definition: "A text file that collects what the job prints (stdout) and its errors (stderr). Logs are the first place to look when a job fails. Cron Manager uses ~/Library/Logs unless you pick another folder in Settings."),
         Term(id: "working-folder", name: "Working folder",
              definition: "The folder the job starts in, which matters for scripts that use relative paths. If it does not exist, launchd cannot start the job and reports exit code 78."),
         Term(id: "environment", name: "Environment variables",
@@ -133,7 +133,7 @@ enum Guide {
             "Schedules the menu cannot show, such as cron lines with several minutes, stay as they are. Cron jobs can also be edited as raw cron syntax with Custom.",
         ]),
         Topic(id: "logs", title: "Logs and output", symbol: "doc.text", body: [
-            "Programs write normal output (stdout) and errors (stderr). Turn on **Save output** to collect both in a log file under ~/Library/Logs.",
+            "Programs write normal output (stdout) and errors (stderr). Turn on **Save output** to collect both in a log file, under ~/Library/Logs unless you pick another folder in Settings.",
             "The log appears below the job's details and updates every two seconds, so you can watch a job you started with **Run Now**.",
             "**Last output** shows when the log was last written. launchd keeps no record of when a job last ran, so the log's date is the closest clue.",
         ]),

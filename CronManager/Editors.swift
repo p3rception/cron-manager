@@ -21,15 +21,21 @@ struct AgentEditor: View {
     @State private var environment = ""
     @State private var showAdvanced = false
     @FocusState private var nameFocused: Bool
+    @AppStorage(Defaults.labelPrefixKey) private var labelPrefix = Defaults.labelPrefix
+    @AppStorage(Defaults.logFolderKey) private var logFolder = Defaults.logFolder
+    @AppStorage(Defaults.saveOutputKey) private var saveOutput = true
 
     private var slug: String {
         slugify(name)
     }
-    private var effectiveLabel: String { label.isEmpty ? "com.\(NSUserName()).\(slug)" : label }
-    /// launchd does not expand ~, so log paths are absolute.
+    private var effectiveLabel: String {
+        guard label.isEmpty else { return label }
+        let prefix = labelPrefix.trimmingCharacters(in: CharacterSet(charactersIn: ". "))
+        return prefix.isEmpty ? slug : "\(prefix).\(slug)"
+    }
     private var defaultLog: String {
         let file = !slug.isEmpty ? slug : label.isEmpty ? "name" : label
-        return FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/\(file).log"
+        return logFolder + "/\(file).log"
     }
     /// New jobs log to the default path until a path is typed in.
     private func logPath(_ field: String) -> String { field.isEmpty && original == nil ? defaultLog : field }
@@ -86,7 +92,7 @@ struct AgentEditor: View {
 
     private func load() {
         nameFocused = original == nil
-        guard let source else { return }
+        guard let source else { logOn = saveOutput; return }
         let p = source.plist
         label = source.label
         command = commandLine(source.arguments)
@@ -181,11 +187,13 @@ struct CronEditor: View {
     @State private var logOn = true
     @State private var log = ""
 
-    /// ~/Library/Logs/<script name>.log, from the command's first word.
+    /// <log folder>/<script name>.log, from the command's first word.
     private var defaultLog: String {
         let first = command.split(separator: " ").first.map { (String($0) as NSString).lastPathComponent } ?? ""
         let name = slugify((first as NSString).deletingPathExtension)
-        return FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/\(name.isEmpty ? "cron-job" : name).log"
+        return logFolder + "/\(name.isEmpty ? "cron-job" : name).log"
+    @AppStorage(Defaults.logFolderKey) private var logFolder = Defaults.logFolder
+    @AppStorage(Defaults.saveOutputKey) private var saveOutput = true
     }
 
     var body: some View {
@@ -208,7 +216,7 @@ struct CronEditor: View {
             }
         }
         .onAppear {
-            guard let source = original ?? template else { return }
+            guard let source = original ?? template else { logOn = saveOutput; return }
             command = source.baseCommand
             schedule = Schedule(cron: source.schedule)
             enabled = source.enabled

@@ -28,3 +28,4 @@
 - (i) buttons explain terms; a force click or Look Up tap on the term does the same
 - Install with `make` into /Applications so Spotlight finds the app
 - Settings window (Cmd+,) with a Light, Dark or System appearance choice
+- Settings for new jobs: label prefix, log folder and whether Save output starts on

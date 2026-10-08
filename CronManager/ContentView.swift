@@ -3,7 +3,7 @@ import SwiftUI
 @main
 struct CronManagerApp: App {
     @State private var state = AppState()
-    @AppStorage(Appearance.key) private var appearance = Appearance.system
+    @AppStorage(Defaults.appearanceKey) private var appearance = Appearance.system
 
     init() { appearance.apply() }
 
