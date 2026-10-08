@@ -67,25 +67,30 @@ struct ContentView: View {
                     TermLabel("Crontab", term: "crontab")
                 }
             }
-            .navigationSplitViewColumnWidth(min: 240, ideal: 300)
             .searchable(text: $search, placement: .sidebar, prompt: "Label, owner or command")
             .toolbar {
-                let count = state.problemCount
-                Toggle(isOn: $onlyProblems) {
-                    Label("\(count)", systemImage: "exclamationmark.triangle")
+                // One group shares one toolbar capsule, so all three fit
+                // beside the sidebar button at the minimum sidebar width.
+                ToolbarItemGroup {
+                    let count = state.problemCount
+                    Toggle(isOn: $onlyProblems) {
+                        Label("\(count)", systemImage: "exclamationmark.triangle")
+                    }
+                    .toggleStyle(.button)
+                    .labelStyle(.titleAndIcon)
+                    .help("Show only jobs that need attention")
+                    .accessibilityLabel("\(count) jobs need attention")
+                    .disabled(count == 0 && !onlyProblems)
+                    Menu {
+                        Button("New LaunchAgent") { editing = .agent(nil) }
+                        Button("New Cron Job") { editing = .cron(nil) }
+                    } label: { Label("New", systemImage: "plus") }
+                    Button { state.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                        .keyboardShortcut("r")
                 }
-                .toggleStyle(.button)
-                .labelStyle(.titleAndIcon)
-                .help("Show only jobs that need attention")
-                .accessibilityLabel("\(count) jobs need attention")
-                .disabled(count == 0 && !onlyProblems)
-                Menu {
-                    Button("New LaunchAgent") { editing = .agent(nil) }
-                    Button("New Cron Job") { editing = .cron(nil) }
-                } label: { Label("New", systemImage: "plus") }
-                Button { state.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                    .keyboardShortcut("r")
             }
+            // Last, so the width reaches the split view through the other modifiers.
+            .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 480)
         } detail: {
             switch selection {
             case .agent(let id):
