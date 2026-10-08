@@ -113,23 +113,23 @@ assert(CronJob(id: 0, line: "0 0 * * * /no/such.sh")!.problems.count == 1)
 assert(CronJob(id: 0, line: "#off 0 0 * * * /no/such.sh")!.problems.isEmpty)
 
 // Cron log redirects
-let logged = CronJob(id: 0, line: "0 0 * * * /a/b.sh --x >> '/Users/per/Library/Logs/my log.log' 2>&1")!
-assert(logged.baseCommand == "/a/b.sh --x" && logged.logPath == "/Users/per/Library/Logs/my log.log")
-assert(CronJob.command(logged.baseCommand, log: logged.logPath) == "/a/b.sh --x >> '/Users/per/Library/Logs/my log.log' 2>&1")
+let logged = CronJob(id: 0, line: "0 0 * * * /a/b.sh --x >> '/Users/alex/Library/Logs/my log.log' 2>&1")!
+assert(logged.baseCommand == "/a/b.sh --x" && logged.logPath == "/Users/alex/Library/Logs/my log.log")
+assert(CronJob.command(logged.baseCommand, log: logged.logPath) == "/a/b.sh --x >> '/Users/alex/Library/Logs/my log.log' 2>&1")
 assert(CronJob(id: 0, line: "0 0 * * * /a/b.sh >>/tmp/x.log 2>&1")!.logPath == "/tmp/x.log")
 assert(CronJob(id: 0, line: "0 0 * * * /a/b.sh > /tmp/x.log")!.logPath == nil)
 assert(CronJob.command("/a/b.sh", log: nil) == "/a/b.sh")
 
 // Convert cron to LaunchAgent, and copies
-let paperless = CronJob(id: 0, line: "0 0,12 * * * /Users/per/Docker/paperless-ngx/paperless-updater.sh >> /tmp/p.log 2>&1")!
-let converted = Agent(converting: paperless)!
-assert(converted.label == "com.\(NSUserName()).paperless-updater")
-assert(converted.arguments == ["/Users/per/Docker/paperless-ngx/paperless-updater.sh"])
+let backup = CronJob(id: 0, line: "0 0,12 * * * /Users/alex/scripts/nightly-backup.sh >> /tmp/p.log 2>&1")!
+let converted = Agent(converting: backup)!
+assert(converted.label == "com.\(NSUserName()).nightly-backup")
+assert(converted.arguments == ["/Users/alex/scripts/nightly-backup.sh"])
 assert(Schedule(plist: converted.plist).times.map(\.text) == ["00:00", "12:00"])
 assert(converted.plist["StandardOutPath"] as? String == "/tmp/p.log")
 assert(Agent(converting: CronJob(id: 0, line: "0 9 * * * cd /tmp && ls")!)!.arguments == ["/bin/sh", "-c", "cd /tmp && ls"])
 assert(Agent(converting: CronJob(id: 0, line: "@reboot /usr/bin/true")!)!.plist["RunAtLoad"] as? Bool == true)
 assert(Agent(converting: CronJob(id: 0, line: "*/7 * * * * /usr/bin/true")!) == nil)
 let copied = converted.copy
-assert(copied.label == converted.label + "-copy" && (copied.plist["StandardOutPath"] as? String)?.hasSuffix("paperless-updater-copy.log") == true)
+assert(copied.label == converted.label + "-copy" && (copied.plist["StandardOutPath"] as? String)?.hasSuffix("nightly-backup-copy.log") == true)
 print("ok")

@@ -5,6 +5,9 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 APP=dist/CronManager.app
+# Local settings such as BUNDLE_ID live in an untracked .env; see .env.example.
+if [ -f .env ]; then . ./.env; fi
+BUNDLE_ID=${BUNDLE_ID:-io.github.p3rception.CronManager}
 pkill -x CronManager 2>/dev/null || true
 
 swift build -c release --disable-keychain
@@ -18,7 +21,7 @@ PLIST="$APP/Contents/Info.plist"
 plutil -create xml1 "$PLIST"
 set_key() { plutil -replace "$1" "-$2" "$3" "$PLIST"; }
 set_key CFBundleExecutable string CronManager
-set_key CFBundleIdentifier string com.per.CronManager
+set_key CFBundleIdentifier string "$BUNDLE_ID"
 set_key CFBundleName string "Cron Manager"
 set_key CFBundleIconFile string AppIcon
 set_key CFBundlePackageType string APPL

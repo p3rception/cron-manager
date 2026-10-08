@@ -21,7 +21,7 @@ enum Glossary {
         Term(id: "plist", name: "plist",
              definition: "Property list: Apple's settings file format. Each LaunchAgent is one plist that tells launchd what to run and when. More > View Plist shows the raw file."),
         Term(id: "label", name: "Label",
-             definition: "The unique name of a LaunchAgent, written in reverse-domain style such as com.per.backup. launchd and launchctl use it to find the job."),
+             definition: "The unique name of a LaunchAgent, written in reverse-domain style such as com.example.backup. launchd and launchctl use it to find the job."),
         Term(id: "load", name: "Load and Unload",
              definition: "**Load** hands a LaunchAgent to launchd so its schedule starts. **Unload** stops it. Cron Manager also disables it so it stays off after the next login. The plist file is kept either way."),
         Term(id: "run-now", name: "Run Now",
