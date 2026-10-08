@@ -47,7 +47,7 @@ struct CronJob: Identifiable, Equatable {
         self.command = String(command)
     }
 
-    /// The command without a trailing `>> file 2>&1`, and that file.
+    /// The command without a trailing `>> file 2>&1`, plus that file.
     var baseCommand: String { splitLog.command }
     var logPath: String? { splitLog.log }
 

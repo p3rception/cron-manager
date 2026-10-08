@@ -7,6 +7,9 @@ struct CronManagerApp: App {
     var body: some Scene {
         WindowGroup("Cron Manager") { ContentView(state: state) }
             .defaultSize(width: 1000, height: 650)
+            .commands { HelpCommands() }
+        Window("Cron Manager Guide", id: "guide") { GuideView() }
+            .defaultSize(width: 860, height: 600)
     }
 }
 
@@ -43,21 +46,25 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
-                Section("LaunchAgents") {
+                Section {
                     ForEach(state.agents.filter { (!onlyProblems || !state.problems($0).isEmpty) && matches(agent: $0) }) { agent in
                         let owner = state.owner(agent)
                         row(agent.label, detail: "\(owner.name), \(state.statusText(agent)), \(agent.schedule)",
                             owner: owner, problem: state.problems(agent).first)
                             .tag(Selection.agent(agent.id))
                     }
+                } header: {
+                    TermLabel("LaunchAgents", term: "launchagent")
                 }
-                Section("Crontab") {
+                Section {
                     ForEach(state.cronJobs.filter { (!onlyProblems || !$0.problems.isEmpty) && matches(search, $0.command) }) { job in
                         let owner = Owner(command: job.command)
                         row(job.baseCommand, detail: "\(owner.name), \(job.summary)\(job.enabled ? "" : ", disabled")",
                             owner: owner, problem: job.problems.first)
                             .tag(Selection.cron(job.id))
                     }
+                } header: {
+                    TermLabel("Crontab", term: "crontab")
                 }
             }
             .navigationSplitViewColumnWidth(min: 240, ideal: 300)
@@ -152,8 +159,8 @@ struct ContentView: View {
         query.isEmpty || fields.contains { $0.localizedStandardContains(query) }
     }
 
-    /// A job with a problem gets a badge on its icon, and the problem
-    /// replaces the subtitle.
+    /// A job with a problem gets a badge on its icon. The problem replaces
+    /// the subtitle.
     private func row(_ title: String, detail: String, owner: Owner, problem: Problem?) -> some View {
         HStack {
             OwnerIcon(owner: owner, size: 22)
@@ -194,17 +201,17 @@ struct AgentDetail: View {
             }
             ProblemsSection(problems: state.problems(agent))
             Section {
-                LabeledContent("Status", value: state.statusText(agent))
-                LabeledContent("Schedule", value: agent.schedule)
-                LabeledContent("Next run", value: nextRun(loaded: loaded))
+                TermRow("Status", term: "status", value: state.statusText(agent))
+                TermRow("Schedule", term: "schedule", value: agent.schedule)
+                TermRow("Next run", term: "next-run", value: nextRun(loaded: loaded))
                 if !agent.logPaths.isEmpty {
-                    LabeledContent("Last output", value: lastOutput)
+                    TermRow("Last output", term: "last-output", value: lastOutput)
                 }
                 if loaded, let runs = Launchd.runs(agent) {
-                    LabeledContent("Runs since loaded", value: "\(runs)")
+                    TermRow("Runs since loaded", term: "runs", value: "\(runs)")
                 }
-                LabeledContent("Command") { Text(commandLine(agent.arguments)).textSelection(.enabled) }
-                LabeledContent("File") { Text(agent.url.path).textSelection(.enabled) }
+                TermRow("Command", term: "command", value: commandLine(agent.arguments))
+                TermRow("File", term: "plist", value: agent.url.path)
             }
             Section {
                 HStack {
@@ -288,6 +295,27 @@ struct LogSection: View {
     }
 }
 
+/// A detail row whose label has an (i) button for its term.
+struct TermRow: View {
+    let title: String
+    let term: String
+    let value: String
+
+    init(_ title: String, term: String, value: String) {
+        self.title = title
+        self.term = term
+        self.value = value
+    }
+
+    var body: some View {
+        LabeledContent {
+            Text(value).textSelection(.enabled)
+        } label: {
+            TermLabel(title, term: term)
+        }
+    }
+}
+
 /// "8 Oct 2026 at 18:00 (in 3 hours)"
 func describe(_ date: Date) -> String {
     "\(date.formatted(date: .abbreviated, time: .shortened)) (\(date.formatted(.relative(presentation: .named))))"
@@ -298,7 +326,7 @@ struct ProblemsSection: View {
 
     var body: some View {
         if !problems.isEmpty {
-            Section("Needs attention") {
+            Section {
                 ForEach(problems, id: \.self) { problem in
                     Label {
                         VStack(alignment: .leading, spacing: 2) {
@@ -309,7 +337,9 @@ struct ProblemsSection: View {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                     }
                 }
-            }
+            } header: {
+                    TermLabel("Needs attention", term: "attention")
+                }
         }
     }
 }
@@ -333,10 +363,10 @@ struct CronDetail: View {
             }
             ProblemsSection(problems: job.problems)
             Section {
-                LabeledContent("Schedule", value: job.summary == job.schedule ? job.schedule : "\(job.summary) (\(job.schedule))")
-                LabeledContent("Next run", value: nextRun)
-                LabeledContent("Command") { Text(job.baseCommand).textSelection(.enabled) }
-                LabeledContent("Status", value: job.enabled ? "enabled" : "disabled")
+                TermRow("Schedule", term: "cron-syntax", value: job.summary == job.schedule ? job.schedule : "\(job.summary) (\(job.schedule))")
+                TermRow("Next run", term: "next-run", value: nextRun)
+                TermRow("Command", term: "command", value: job.baseCommand)
+                TermRow("Status", term: "enabled", value: job.enabled ? "enabled" : "disabled")
             }
             Section {
                 HStack {

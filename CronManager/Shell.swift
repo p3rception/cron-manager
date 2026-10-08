@@ -123,7 +123,7 @@ struct Problem: Hashable {
 
 private let interpreters: Set<String> = ["sh", "bash", "zsh", "dash", "ksh", "fish", "python", "python3", "perl", "ruby", "node", "osascript", "php"]
 
-/// Checks that the program, and the script an interpreter runs, exist and
+/// Checks that the program and the script an interpreter runs exist and
 /// can run. Only absolute paths are checked; PATH lookups are left alone.
 func programProblems(_ argv: [String]) -> [Problem] {
     guard let program = argv.first else {

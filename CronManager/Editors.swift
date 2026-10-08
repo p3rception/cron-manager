@@ -50,19 +50,23 @@ struct AgentEditor: View {
                     logOn = on
                     if on, original != nil, stdout.isEmpty, stderr.isEmpty { stdout = defaultLog; stderr = defaultLog }
                 })) {
-                    Text("Save output to \(((logPath(stdout).isEmpty ? defaultLog : logPath(stdout)) as NSString).abbreviatingWithTildeInPath)")
+                    TermLabel("Save output to \(((logPath(stdout).isEmpty ? defaultLog : logPath(stdout)) as NSString).abbreviatingWithTildeInPath)", term: "log")
                 }
                 DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
-                    TextField("Label", text: $label, prompt: Text(effectiveLabel))
+                    LabeledContent {
+                        TextField("Label", text: $label, prompt: Text(effectiveLabel)).labelsHidden()
+                    } label: { TermLabel("Label", term: "label") }
                     if schedule.kind != .atLogin {
-                        Toggle("Also run at login", isOn: $runAtLoad)
+                        Toggle(isOn: $runAtLoad) { TermLabel("Also run at login", term: "run-at-login") }
                     }
                     if logOn {
                         TextField("Output log", text: $stdout, prompt: Text(defaultLog))
                         TextField("Error log", text: $stderr, prompt: Text(defaultLog))
                     }
-                    TextField("Working folder", text: $workingDirectory, prompt: Text("/"))
-                    LabeledContent("Environment") {
+                    LabeledContent {
+                        TextField("Working folder", text: $workingDirectory, prompt: Text("/")).labelsHidden()
+                    } label: { TermLabel("Working folder", term: "working-folder") }
+                    LabeledContent {
                         VStack(alignment: .trailing) {
                             TextEditor(text: $environment)
                                 .font(.system(.body, design: .monospaced))
@@ -71,7 +75,7 @@ struct AgentEditor: View {
                                 Button("Add Homebrew to PATH", action: addHomebrewPath).controlSize(.small)
                             }
                         }
-                    }
+                    } label: { TermLabel("Environment", term: "environment") }
                     Text("One NAME=value per line. launchd starts jobs with PATH=/usr/bin:/bin:/usr/sbin:/sbin, so tools from Homebrew are not found unless PATH is set here.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -188,11 +192,13 @@ struct CronEditor: View {
         EditorSheet(submit: submit) {
             Section {
                 CommandField(command: $command, autofocus: original == nil)
-                Toggle("Enabled", isOn: $enabled)
+                Toggle(isOn: $enabled) { TermLabel("Enabled", term: "enabled") }
             }
             ScheduleFields(schedule: $schedule, cron: true)
             Section {
-                Toggle("Save output to \(((log.isEmpty ? defaultLog : log) as NSString).abbreviatingWithTildeInPath)", isOn: $logOn)
+                Toggle(isOn: $logOn) {
+                    TermLabel("Save output to \(((log.isEmpty ? defaultLog : log) as NSString).abbreviatingWithTildeInPath)", term: "log")
+                }
                 if logOn {
                     TextField("Log file", text: $log, prompt: Text(defaultLog))
                 }
@@ -265,7 +271,7 @@ struct CommandField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        LabeledContent("Command") {
+        LabeledContent {
             HStack {
                 TextField("Command", text: $command, prompt: Text("/path/to/script.sh"))
                     .labelsHidden()
@@ -273,7 +279,7 @@ struct CommandField: View {
                     .focused($focused)
                 Button("Choose...", action: choose)
             }
-        }
+        } label: { TermLabel("Command", term: "command") }
         .onAppear { focused = autofocus }
     }
 
@@ -298,11 +304,11 @@ struct ScheduleFields: View {
 
     var body: some View {
         Section {
-            Picker("Repeat", selection: $schedule.kind) {
+            Picker(selection: $schedule.kind) {
                 ForEach(Schedule.Kind.allCases.filter { $0 != .custom || cron || keepsCustom }, id: \.self) { kind in
                     Text(title(kind))
                 }
-            }
+            } label: { TermLabel("Repeat", term: "schedule") }
             switch schedule.kind {
             case .interval:
                 LabeledContent("Every") {
@@ -335,8 +341,11 @@ struct ScheduleFields: View {
                 EmptyView()
             case .custom:
                 if cron {
-                    TextField("Cron schedule", text: $schedule.custom, prompt: Text("0 0,12 * * *"))
-                        .font(.system(.body, design: .monospaced))
+                    LabeledContent {
+                        TextField("Cron schedule", text: $schedule.custom, prompt: Text("0 0,12 * * *"))
+                            .labelsHidden()
+                            .font(.system(.body, design: .monospaced))
+                    } label: { TermLabel("Cron schedule", term: "cron-syntax") }
                 }
             }
         } footer: {

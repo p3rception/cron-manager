@@ -24,4 +24,6 @@
 - Convert a cron job to a LaunchAgent; the cron line is disabled, not deleted
 - View the raw plist or crontab, with a Copy button
 - App icon
+- Guide and glossary in Help > Cron Manager Guide, for people new to launchd and cron
+- (i) buttons explain terms; a force click or Look Up tap on the term does the same
 - Install with `make` into /Applications so Spotlight finds the app
