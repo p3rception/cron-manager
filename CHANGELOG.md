@@ -27,3 +27,4 @@
 - Guide and glossary in Help > Cron Manager Guide, for people new to launchd and cron
 - (i) buttons explain terms; a force click or Look Up tap on the term does the same
 - Install with `make` into /Applications so Spotlight finds the app
+- Settings window (Cmd+,) with a Light, Dark or System appearance choice

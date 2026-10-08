@@ -3,6 +3,9 @@ import SwiftUI
 @main
 struct CronManagerApp: App {
     @State private var state = AppState()
+    @AppStorage(Appearance.key) private var appearance = Appearance.system
+
+    init() { appearance.apply() }
 
     var body: some Scene {
         WindowGroup("Cron Manager") { ContentView(state: state) }
@@ -10,6 +13,7 @@ struct CronManagerApp: App {
             .commands { HelpCommands() }
         Window("Cron Manager Guide", id: "guide") { GuideView() }
             .defaultSize(width: 860, height: 600)
+        Settings { SettingsView() }
     }
 }
 
