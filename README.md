@@ -1,4 +1,6 @@
-# Cron Manager
+# <img src="docs/icon.png" alt="" width="64" align="center"> Cron Manager
+
+[Features](#features) | [Screenshots](#screenshots) | [Requirements](#requirements) | [Build and install](#build-and-install) | [Opening a downloaded build](#opening-a-downloaded-build) | [Permissions](#permissions) | [What it changes](#what-it-changes-on-your-mac) | [License](#license)
 
 A native macOS app for the jobs your Mac runs on a schedule: your LaunchAgents and your crontab. See what runs, who added it and when it runs next. Change it without editing plists or cron syntax by hand.
 
@@ -14,6 +16,8 @@ A native macOS app for the jobs your Mac runs on a schedule: your LaunchAgents a
 - Convert a cron job to a LaunchAgent
 - Restore the previous version of any job you edited
 - A built-in guide and glossary for people new to launchd and cron
+
+## Screenshots
 
 | Editing a job | Learning a term |
 | --- | --- |
