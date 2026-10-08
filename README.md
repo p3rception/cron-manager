@@ -1,4 +1,4 @@
-# <img src="docs/icon.png" alt="" width="64" align="center"> Cron Manager
+# <img src="docs/icon.png" alt="" width="64" align="absmiddle"> Cron Manager
 
 [Features](#features) | [Screenshots](#screenshots) | [Requirements](#requirements) | [Build and install](#build-and-install) | [Opening a downloaded build](#opening-a-downloaded-build) | [Permissions](#permissions) | [What it changes](#what-it-changes-on-your-mac) | [License](#license)
 
