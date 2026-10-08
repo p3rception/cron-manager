@@ -46,7 +46,7 @@ struct SettingsView: View {
                         Button("Choose...", action: chooseLogFolder)
                     }
                 } label: { TermLabel("Log folder", term: "log") }
-                Toggle("Save output", isOn: $saveOutput)
+                Toggle("Save output by default", isOn: $saveOutput)
             } header: {
                 Text("New jobs")
             } footer: {
