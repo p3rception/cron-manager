@@ -129,6 +129,12 @@ struct ContentView: View {
                 cronEditor(original: nil, template: template)
             }
         }
+        // Picks up jobs changed in a terminal or another app. Skipped while an
+        // editor is open: cron jobs are addressed by line number, and a reload
+        // could point the open edit at a different line.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            if editing == nil { state.refresh() }
+        }
         .alert("Error", isPresented: Binding(get: { state.error != nil }, set: { if !$0 { state.error = nil } })) {
         } message: {
             Text(state.error ?? "")
