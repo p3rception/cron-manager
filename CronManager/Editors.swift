@@ -77,7 +77,7 @@ struct AgentEditor: View {
                             TextEditor(text: $environment)
                                 .font(.system(.body, design: .monospaced))
                                 .frame(height: 60)
-                            if FileManager.default.fileExists(atPath: "/opt/homebrew/bin") {
+                            if homebrewPrefix != nil {
                                 Button("Add Homebrew to PATH", action: addHomebrewPath).controlSize(.small)
                             }
                         }
@@ -108,9 +108,15 @@ struct AgentEditor: View {
         showAdvanced = !workingDirectory.isEmpty || !environment.isEmpty
     }
 
+    /// /opt/homebrew on Apple silicon, /usr/local on Intel.
+    private let homebrewPrefix = ["/opt/homebrew", "/usr/local"].first {
+        FileManager.default.isExecutableFile(atPath: $0 + "/bin/brew")
+    }
+
     /// Puts Homebrew in front of launchd's default PATH, replacing any PATH line.
     private func addHomebrewPath() {
-        let path = "PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
+        guard let prefix = homebrewPrefix else { return }
+        let path = "PATH=\(prefix)/bin:\(prefix)/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
         let others = environment.split(separator: "\n").filter { !$0.hasPrefix("PATH=") }.map(String.init)
         environment = ([path] + others).joined(separator: "\n")
     }
@@ -186,14 +192,14 @@ struct CronEditor: View {
     @State private var enabled = true
     @State private var logOn = true
     @State private var log = ""
+    @AppStorage(Defaults.logFolderKey) private var logFolder = Defaults.logFolder
+    @AppStorage(Defaults.saveOutputKey) private var saveOutput = true
 
     /// <log folder>/<script name>.log, from the command's first word.
     private var defaultLog: String {
         let first = command.split(separator: " ").first.map { (String($0) as NSString).lastPathComponent } ?? ""
         let name = slugify((first as NSString).deletingPathExtension)
         return logFolder + "/\(name.isEmpty ? "cron-job" : name).log"
-    @AppStorage(Defaults.logFolderKey) private var logFolder = Defaults.logFolder
-    @AppStorage(Defaults.saveOutputKey) private var saveOutput = true
     }
 
     var body: some View {
