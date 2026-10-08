@@ -2,3 +2,4 @@
 .swiftpm/
 dist/
 .env
+CLAUDE.md
